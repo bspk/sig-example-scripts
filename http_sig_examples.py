@@ -90,23 +90,26 @@ def hardwrap(src, space = 2, width = 68):
     lines = src.split('\n') # split existing lines
     out = [] # output buffer
     for l in lines:
+        lout = [] # internal output buffer
         if len(l) > width:
             ll = l[slice(width - 1)] # leave room for a backslash
-            out.append(ll)
+            lout.append(ll)
             l = l[slice(width - 1, len(l))]
             while len(l) > width: # the middle leaves room for spaces, too
                 ll = l[slice(width - 1 - space)]
-                out.append(ll)
+                lout.append(ll)
                 l = l[slice(width - 1 - space, len(l))]
-            out.append(l) # add the last bits
+            lout.append(l) # add the last bits
         else:
-            out.append(l)
-    return ('\\\n' + (' ' * space)).join(out)
+            lout.append(l)
+        out.append(('\\\n' + (' ' * space)).join(lout))
+    return ('\n').join(out)
 
 def softwrap(src, space = 2, width = 68, breakon = '; '):
     lines = src.split('\n') # split existing lines
     out = [] # output buffer
     for l in lines:
+        lout = [] # internal output buffer
         if len(l) > width:
             ll = l[slice(width - 1)] # leave room for a backslash
             # find if there's a better place to break
@@ -117,7 +120,7 @@ def softwrap(src, space = 2, width = 68, breakon = '; '):
                 ll = l[slice(br)] # re-slice
             else:
                 br = width - 1 # no match found, use the default
-            out.append(ll)
+            lout.append(ll)
             l = l[slice(br, len(l))]
             while len(l) > width: # the middle leaves room for spaces, too
                 ll = l[slice(width - 1 - space)]
@@ -129,12 +132,13 @@ def softwrap(src, space = 2, width = 68, breakon = '; '):
                     ll = l[slice(br)] # re-slice
                 else:
                     br = width - 1 - space # no match found, use the default
-                out.append(ll)
+                lout.append(ll)
                 l = l[slice(br, len(l))]
-            out.append(l) # add the last bits
+            lout.append(l) # add the last bits
         else:
-            out.append(l)
-    return ('\\\n' + (' ' * space)).join(out)
+            lout.append(l)
+        out.append(('\\\n' + (' ' * space)).join(lout))
+    return ('\n').join(out)
 
 coveredContent = {
     str(http_sfv.Item("@request-target")): "get /foo",
