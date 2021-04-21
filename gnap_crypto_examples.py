@@ -649,3 +649,5 @@ print(hardwrap(body))
 print()
 
 print('*' * 30)
+
+print(hardwrap(json.dumps(rsajwk, indent=4), space=8))
