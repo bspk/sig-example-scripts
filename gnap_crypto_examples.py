@@ -30,7 +30,7 @@ rsajwkpublic = {
     "n": "hYOJ-XOKISdMMShn_G4W9m20mT0VWtQBsmBBkI2cmRt4Ai8BfYdHsFzAtYKOjpBR1RpKpJmVKxIGNy0g6Z3ad2XYsh8KowlyVy8IkZ8NMwSrcUIBZGYXjHpwjzvfGvXH_5KJlnR3_uRUp4Z4Ujk2bCaKegDn11V2vxE41hqaPUnhRZxe0jRETddzsE3mu1SK8dTCROjwUl14mUNo8iTrTm4n0qDadz8BkPo-uv4BC0bunS0K3bA_3UgVp7zBlQFoFnLTO2uWp_muLEWGl67gBq9MO3brKXfGhi3kOzywzwPTuq-cVQDyEN7aL0SxCb3Hc4IdqDaMg8qHUyObpPitDQ"
 }
 
-rsacert = """
+rsapk = b"""
 -----BEGIN PRIVATE KEY-----
 MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCFg4n5c4ohJ0wx
 KGf8bhb2bbSZPRVa1AGyYEGQjZyZG3gCLwF9h0ewXMC1go6OkFHVGkqkmZUrEgY3
@@ -61,7 +61,22 @@ HH9RwPIzguUHWmTt8y0oXyI=
 -----END PRIVATE KEY-----
 """
 
-
+rsacert = """MIIC6jCCAdKgAwIBAgIGAXjw74xPMA0GCSqGSIb3DQEBCwUAMDYxNDAyBgNVBAMM
+K05JWU15QmpzRGp5QkM5UDUzN0Q2SVR6a3BEOE50UmppOXlhcEV6QzY2bVEwHhcN
+MjEwNDIwMjAxODU0WhcNMjIwMjE0MjAxODU0WjA2MTQwMgYDVQQDDCtOSVlNeUJq
+c0RqeUJDOVA1MzdENklUemtwRDhOdFJqaTl5YXBFekM2Nm1RMIIBIjANBgkqhkiG
+9w0BAQEFAAOCAQ8AMIIBCgKCAQEAhYOJ+XOKISdMMShn/G4W9m20mT0VWtQBsmBB
+kI2cmRt4Ai8BfYdHsFzAtYKOjpBR1RpKpJmVKxIGNy0g6Z3ad2XYsh8KowlyVy8I
+kZ8NMwSrcUIBZGYXjHpwjzvfGvXH/5KJlnR3/uRUp4Z4Ujk2bCaKegDn11V2vxE4
+1hqaPUnhRZxe0jRETddzsE3mu1SK8dTCROjwUl14mUNo8iTrTm4n0qDadz8BkPo+
+uv4BC0bunS0K3bA/3UgVp7zBlQFoFnLTO2uWp/muLEWGl67gBq9MO3brKXfGhi3k
+OzywzwPTuq+cVQDyEN7aL0SxCb3Hc4IdqDaMg8qHUyObpPitDQIDAQABMA0GCSqG
+SIb3DQEBCwUAA4IBAQBnYFK0eYHy+hVf2D58usj39lhL5znb/q9G35GBd/XsWfCE
+wHuLOSZSUmG71bZtrOcx0ptle9bp2kKl4HlSTTfbtpuG5onSa3swRNhtKtUy5NH9
+W/FLViKWfoPS3kwoEpC1XqKY6l7evoTCtS+kTQRSrCe4vbNprCAZRxz6z1nEeCgu
+NMk38yTRvx8ihZpVOuU+Ih+dOtVe/ex5IAPYxlQsvtfhsUZqc7IyCcy72WHnRHlU
+fn3pJm0S5270+Yls3Iv6h3oBAP19i906UjiUTNH3g0xMW+V4uLxgyckt4wD4Mlyv
+jnaQ7Z3sR6EsXMocAbXHIAJhwKdtU/fLgdwL5vtx"""
 
 
 def hardwrap(src, space = 2, width = 68):
@@ -158,6 +173,8 @@ body = """
 """
 print(hardwrap(body))
 print()
+print('Content-Length: ' + str(len(body)))
+print()
 
 jwsHeader = {
     "alg": rsajwk['alg'],
@@ -185,6 +202,16 @@ print('Signed:')
 print(signed)
 print()
 print(hardwrap('Detached-JWS: ' + signed))
+print()
+
+print("POST /gnap HTTP/1.1")
+print("Host: server.example.com")
+print("Content-Type: application/json")
+print('Content-Length: ' + str(len(body)))
+print(hardwrap('Detached-JWS: ' + signed))
+print()
+print(hardwrap(body))
+print()
 
 print('*' * 30)
 
@@ -220,9 +247,13 @@ body = """
         "name": "My Client Display Name",
         "uri": "https://client.foo/"
       },
+    },
+    "subject": {
+        "formats": ["iss_sub", "opaque"]
     }
 }
 """
+
 print(hardwrap(body))
 print()
 
@@ -247,5 +278,374 @@ print('Signed:')
 print(signed)
 print()
 print(hardwrap(signed, 0))
+print()
+print('Content-Length: ' + str(len(signed)))
+print()
+
+print("POST /gnap HTTP/1.1")
+print("Host: server.example.com")
+print("Content-Type: application/jose")
+print('Content-Length: ' + str(len(body)))
+print()
+print(hardwrap(signed, 0))
+print()
+
+print('*' * 30)
+
+## MTLS Example
+
+body = """
+{
+    "access_token": {
+        "access": [
+            "dolphin-metadata"
+        ]
+    },
+    "interact": {
+        "start": ["redirect"],
+        "finish": {
+            "method": "redirect",
+            "uri": "https://client.foo/callback",
+            "nonce": "VJLO6A4CAYLBXHTR0KRO"
+        }
+    },
+    "client": {
+      "proof": "jws",
+      "key": {
+        "cert": "MIIC6jCCAdKgAwIBAgIGAXjw74xPMA0GCSqGSIb3DQEBCwUAMDYxNDAyBgNVBAMMK05JWU15QmpzRGp5QkM5UDUzN0Q2SVR6a3BEOE50UmppOXlhcEV6QzY2bVEwHhcNMjEwNDIwMjAxODU0WhcNMjIwMjE0MjAxODU0WjA2MTQwMgYDVQQDDCtOSVlNeUJqc0RqeUJDOVA1MzdENklUemtwRDhOdFJqaTl5YXBFekM2Nm1RMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAhYOJ+XOKISdMMShn/G4W9m20mT0VWtQBsmBBkI2cmRt4Ai8BfYdHsFzAtYKOjpBR1RpKpJmVKxIGNy0g6Z3ad2XYsh8KowlyVy8IkZ8NMwSrcUIBZGYXjHpwjzvfGvXH/5KJlnR3/uRUp4Z4Ujk2bCaKegDn11V2vxE41hqaPUnhRZxe0jRETddzsE3mu1SK8dTCROjwUl14mUNo8iTrTm4n0qDadz8BkPo+uv4BC0bunS0K3bA/3UgVp7zBlQFoFnLTO2uWp/muLEWGl67gBq9MO3brKXfGhi3kOzywzwPTuq+cVQDyEN7aL0SxCb3Hc4IdqDaMg8qHUyObpPitDQIDAQABMA0GCSqGSIb3DQEBCwUAA4IBAQBnYFK0eYHy+hVf2D58usj39lhL5znb/q9G35GBd/XsWfCEwHuLOSZSUmG71bZtrOcx0ptle9bp2kKl4HlSTTfbtpuG5onSa3swRNhtKtUy5NH9W/FLViKWfoPS3kwoEpC1XqKY6l7evoTCtS+kTQRSrCe4vbNprCAZRxz6z1nEeCguNMk38yTRvx8ihZpVOuU+Ih+dOtVe/ex5IAPYxlQsvtfhsUZqc7IyCcy72WHnRHlUfn3pJm0S5270+Yls3Iv6h3oBAP19i906UjiUTNH3g0xMW+V4uLxgyckt4wD4MlyvjnaQ7Z3sR6EsXMocAbXHIAJhwKdtU/fLgdwL5vtx"
+      }
+      "display": {
+        "name": "My Client Display Name",
+        "uri": "https://client.foo/"
+      },
+    },
+    "subject": {
+        "formats": ["iss_sub", "opaque"]
+    }
+}
+"""
+
+print(hardwrap(body))
+print()
+print('Content-Length: ' + str(len(body)))
+print()
+
+print("POST /gnap HTTP/1.1")
+print("Host: server.example.com")
+print("Content-Type: application/jose")
+print('Content-Length: ' + str(len(body)))
+print(softwrap('Client-Cert: ' + rsacert.replace('\n', ' ')))
+print()
+print(hardwrap(body))
+print()
+
+
+print('*' * 30)
+
+## DPoP Example
+
+body = """
+{
+    "access_token": {
+        "access": [
+            "dolphin-metadata"
+        ]
+    },
+    "interact": {
+        "start": ["redirect"],
+        "finish": {
+            "method": "redirect",
+            "uri": "https://client.foo/callback",
+            "nonce": "VJLO6A4CAYLBXHTR0KRO"
+        }
+    },
+    "client": {
+      "proof": "dpop",
+      "key": {
+        "jwk": {
+            "kid": "gnap-rsa",
+            "kty": "RSA",
+            "e": "AQAB",
+            "alg": "RS256",
+            "n": "hYOJ-XOKISdMMShn_G4W9m20mT0VWtQBsmBBkI2cmRt4Ai8BfYdHsFzAtYKOjpBR1RpKpJmVKxIGNy0g6Z3ad2XYsh8KowlyVy8IkZ8NMwSrcUIBZGYXjHpwjzvfGvXH_5KJlnR3_uRUp4Z4Ujk2bCaKegDn11V2vxE41hqaPUnhRZxe0jRETddzsE3mu1SK8dTCROjwUl14mUNo8iTrTm4n0qDadz8BkPo-uv4BC0bunS0K3bA_3UgVp7zBlQFoFnLTO2uWp_muLEWGl67gBq9MO3brKXfGhi3kOzywzwPTuq-cVQDyEN7aL0SxCb3Hc4IdqDaMg8qHUyObpPitDQ"
+        }
+      }
+      "display": {
+        "name": "My Client Display Name",
+        "uri": "https://client.foo/"
+      },
+    }
+}
+"""
+print(hardwrap(body))
+print()
+print('Content-Length: ' + str(len(body)))
+print()
+
+jwsHeader = {
+    "alg": rsajwk['alg'],
+    "typ": "dpop+jwt",
+    "jwk": rsajwkpublic
+}
+
+print('Header:')
+print(jwsHeader)
+print()
+print(hardwrap(json.dumps(jwsHeader, indent=4)))
+print()
+
+hashed = hashlib.new('sha256', str.encode(body)).digest()
+print('Hashed:')
+print(base64.b64encode(hashed).decode('utf-8'))
+print()
+
+jwsBody = {
+    "htu": "https://server.example.com/gnap",
+    "htm": "POST",
+    "iat": 1618884475,
+    "jti": "HjoHrjgm2yB4x7jA5yyG",
+    "htd": "SHA-256=" + base64.b64encode(hashed).decode('utf-8')
+}
+
+print('Body:')
+print(jwsBody)
+print()
+print(json.dumps(jwsBody, indent=4))
+print()
+
+signed = jose.jws.sign(jwsBody, rsajwk, headers=jwsHeader, algorithm=rsajwk['alg'])
+
+print('Signed:')
+print(signed)
+print()
+print(hardwrap('DPoP: ' + signed))
+print()
+
+print("POST /gnap HTTP/1.1")
+print("Host: server.example.com")
+print("Content-Type: application/json")
+print('Content-Length: ' + str(len(body)))
+print(hardwrap('DPoP: ' + signed))
+print()
+print(hardwrap(body))
+print()
+
+print('*' * 30)
+
+## HTTPSig Example
+
+body = """
+{
+    "access_token": {
+        "access": [
+            "dolphin-metadata"
+        ]
+    },
+    "interact": {
+        "start": ["redirect"],
+        "finish": {
+            "method": "redirect",
+            "uri": "https://client.foo/callback",
+            "nonce": "VJLO6A4CAYLBXHTR0KRO"
+        }
+    },
+    "client": {
+      "proof": "httpsig",
+      "key": {
+        "jwk": {
+            "kid": "gnap-rsa",
+            "kty": "RSA",
+            "e": "AQAB",
+            "alg": "RS256",
+            "n": "hYOJ-XOKISdMMShn_G4W9m20mT0VWtQBsmBBkI2cmRt4Ai8BfYdHsFzAtYKOjpBR1RpKpJmVKxIGNy0g6Z3ad2XYsh8KowlyVy8IkZ8NMwSrcUIBZGYXjHpwjzvfGvXH_5KJlnR3_uRUp4Z4Ujk2bCaKegDn11V2vxE41hqaPUnhRZxe0jRETddzsE3mu1SK8dTCROjwUl14mUNo8iTrTm4n0qDadz8BkPo-uv4BC0bunS0K3bA_3UgVp7zBlQFoFnLTO2uWp_muLEWGl67gBq9MO3brKXfGhi3kOzywzwPTuq-cVQDyEN7aL0SxCb3Hc4IdqDaMg8qHUyObpPitDQ"
+        }
+      }
+      "display": {
+        "name": "My Client Display Name",
+        "uri": "https://client.foo/"
+      },
+    }
+}
+"""
+print(hardwrap(body))
+print()
+print('Content-Length: ' + str(len(body)))
+print()
+
+hashed = hashlib.new('sha256', str.encode(body)).digest()
+print('Hashed:')
+print(base64.b64encode(hashed).decode('utf-8'))
+print()
+print(hardwrap('Digest: SHA-256=' + base64.b64encode(hashed).decode('utf-8')))
+print()
+
+coveredContent = {
+    str(http_sfv.Item("@request-target")): "post /gnap",
+    str(http_sfv.Item("host")): "server.example.com",
+    str(http_sfv.Item("content-type")): "application/json",
+    str(http_sfv.Item("digest")): "SHA-256=" + base64.b64encode(hashed).decode('utf-8'),
+    str(http_sfv.Item("content-length")): str(len(body))
+}
+
+sigparams = http_sfv.InnerList()
+base = '';
+for c in coveredContent:
+    i = http_sfv.Item()
+    i.parse(c.encode())
+    sigparams.append(i)
+    base += c # already serialized as an Item
+    base += ': '
+    base += coveredContent[c]
+    base += "\n"
+
+sigparams.params['created'] = 1618884475
+sigparams.params['keyid'] = rsajwk['kid']
+
+sigparamstr = ''
+sigparamstr += str(http_sfv.Item("@signature-params"))
+sigparamstr += ": "
+sigparamstr += str(sigparams)
+
+base += sigparamstr
+
+print("Base string:")
+print(softwrap(base))
+print()
+print(softwrap('Signature-Input: sig1=' + str(sigparams)))
+print()
+
+key = M2Crypto.RSA.load_key_string(rsapk)
+
+hashbase = hashlib.new('sha256', str.encode(base)).digest()
+
+signed = http_sfv.Item(key.sign(hashbase, algo='sha256'))
+
+print("Signed:")
+print(signed)
+print()
+print(hardwrap(str(signed).strip(':'), 0))
+print()
+print(softwrap('Signature: sig1=' + str(signed)))
+print()
+
+print("POST /gnap HTTP/1.1")
+print("Host: server.example.com")
+print("Content-Type: application/json")
+print('Content-Length: ' + str(len(body)))
+print(hardwrap('Digest: SHA-256=' + base64.b64encode(hashed).decode('utf-8')))
+print(softwrap('Signature-Input: sig1=' + str(sigparams)))
+print(softwrap('Signature: sig1=' + str(signed)))
+print()
+print(hardwrap(body))
+print()
+
+
+print('*' * 30)
+
+## OAuth PoP Example
+
+body = """
+{
+    "access_token": {
+        "access": [
+            "dolphin-metadata"
+        ]
+    },
+    "interact": {
+        "start": ["redirect"],
+        "finish": {
+            "method": "redirect",
+            "uri": "https://client.foo/callback",
+            "nonce": "VJLO6A4CAYLBXHTR0KRO"
+        }
+    },
+    "client": {
+      "proof": "oauthpop",
+      "key": {
+        "jwk": {
+            "kid": "gnap-rsa",
+            "kty": "RSA",
+            "e": "AQAB",
+            "alg": "RS256",
+            "n": "hYOJ-XOKISdMMShn_G4W9m20mT0VWtQBsmBBkI2cmRt4Ai8BfYdHsFzAtYKOjpBR1RpKpJmVKxIGNy0g6Z3ad2XYsh8KowlyVy8IkZ8NMwSrcUIBZGYXjHpwjzvfGvXH_5KJlnR3_uRUp4Z4Ujk2bCaKegDn11V2vxE41hqaPUnhRZxe0jRETddzsE3mu1SK8dTCROjwUl14mUNo8iTrTm4n0qDadz8BkPo-uv4BC0bunS0K3bA_3UgVp7zBlQFoFnLTO2uWp_muLEWGl67gBq9MO3brKXfGhi3kOzywzwPTuq-cVQDyEN7aL0SxCb3Hc4IdqDaMg8qHUyObpPitDQ"
+        }
+      }
+      "display": {
+        "name": "My Client Display Name",
+        "uri": "https://client.foo/"
+      },
+    }
+}
+"""
+print(hardwrap(body))
+print()
+print('Content-Length: ' + str(len(body)))
+print()
+
+jwsHeader = {
+    "alg": rsajwk['alg'],
+    "kid": rsajwk['kid']
+}
+
+print('JWS Header:')
+print(jwsHeader)
+print()
+print(hardwrap(json.dumps(jwsHeader, indent=4)))
+print()
+
+hashed = hashlib.new('sha256', str.encode(body)).digest()
+print('Hashed:')
+print(base64.b64encode(hashed).decode('utf-8'))
+print()
+
+headers = {
+    'content-type': 'application/json',
+    'content-length': str(len(body))
+}
+
+out = []
+hs = []
+for h in headers:
+    hs.append(h)
+    l = ''
+    l += h.lower()
+    l += ': '
+    l += headers[h]
+    out.append(l)
+
+hashedheaders = hashlib.new('sha256', str.encode('\n'.join(out))).digest()
+
+
+jwsBody = {
+    "u": "server.example.com",
+    "p": "/gnap",
+    "m": "POST",
+    "ts": 1618884475,
+    "b": base64.urlsafe_b64encode(hashed).decode('utf-8').replace('=', ''),
+    "h": [hs, base64.urlsafe_b64encode(hashedheaders).decode('utf-8').replace('=', '')]
+}
+
+print('JWS Body:')
+print(jwsBody)
+print()
+print(json.dumps(jwsBody, indent=4))
+print()
+
+signed = jose.jws.sign(jwsBody, rsajwk, headers=jwsHeader, algorithm=rsajwk['alg'])
+
+print('Signed:')
+print(signed)
+print()
+print(hardwrap('PoP: ' + signed))
+print()
+
+print("POST /gnap HTTP/1.1")
+print("Host: server.example.com")
+print("Content-Type: application/json")
+print('Content-Length: ' + str(len(body)))
+print(hardwrap('PoP: ' + signed))
+print()
+print(hardwrap(body))
+print()
 
 print('*' * 30)
