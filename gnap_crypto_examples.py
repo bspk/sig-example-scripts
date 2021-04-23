@@ -213,6 +213,14 @@ print()
 print(hardwrap(body))
 print()
 
+verified = jose.jws.verify(signed, rsajwkpublic, rsajwkpublic['alg'])
+
+print("Verified:")
+print('> YES!' if verified else '> NO!')
+print()
+
+
+
 print('*' * 30)
 
 ## Attached JWS Example
@@ -288,6 +296,12 @@ print("Content-Type: application/jose")
 print('Content-Length: ' + str(len(body)))
 print()
 print(hardwrap(signed, 0))
+print()
+
+verified = jose.jws.verify(signed, rsajwkpublic, rsajwkpublic['alg'])
+
+print("Verified:")
+print('> YES!' if verified else '> NO!')
 print()
 
 print('*' * 30)
@@ -430,6 +444,13 @@ print()
 print(hardwrap(body))
 print()
 
+verified = jose.jws.verify(signed, jwsHeader['jwk'], jwsHeader['jwk']['alg'])
+
+print("Verified:")
+print('> YES!' if verified else '> NO!')
+print()
+
+
 print('*' * 30)
 
 ## HTTPSig Example
@@ -539,6 +560,11 @@ print()
 print(hardwrap(body))
 print()
 
+verified = key.verify_rsassa_pss(str.encode(base), signed.value, algo='sha512')
+
+print("Verified:")
+print('> YES!' if verified else '> NO!')
+print()
 
 print('*' * 30)
 
@@ -648,6 +674,15 @@ print()
 print(hardwrap(body))
 print()
 
+verified = jose.jws.verify(signed, rsajwkpublic, rsajwkpublic['alg'])
+
+print("Verified:")
+print('> YES!' if verified else '> NO!')
+print()
+
+
 print('*' * 30)
 
+print("Key:")
+print()
 print(hardwrap(json.dumps(rsajwk, indent=4), space=8))

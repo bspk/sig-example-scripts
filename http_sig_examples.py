@@ -43,6 +43,17 @@ EQeNC8fHGg4UXU8mhHnSBt3EA10qQJfRDs15M38eG2cYwB1PZpDHScDnDA0=
 -----END RSA PRIVATE KEY-----
 """
 
+rsaTestKeyPublic = b"""
+-----BEGIN RSA PUBLIC KEY-----
+MIIBCgKCAQEAhAKYdtoeoy8zcAcR874L8cnZxKzAGwd7v36APp7Pv6Q2jdsPBRrw
+WEBnez6d0UDKDwGbc6nxfEXAy5mbhgajzrw3MOEt8uA5txSKobBpKDeBLOsdJKFq
+MGmXCQvEG7YemcxDTRPxAleIAgYYRjTSd/QBwVW9OwNFhekro3RtlinV0a75jfZg
+kne/YiktSvLG34lw2zqXBDTC5NHROUqGTlML4PlNZS5Ri2U4aCNx2rUPRcKIlE0P
+uKxI4T+HIaFpv8+rdV6eUgOrB2xeI1dSFFn/nnv5OoZJEIB+VmuKn3DCUcCZSFlQ
+PSXSfBDiUGhwOw76WuSSsf1D4b/vLoJ10wIDAQAB
+-----END RSA PUBLIC KEY-----
+"""
+
 rsaTestKeyPss = str.encode("""
 -----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAr4tmm3r20Wd/PbqvP1s2
@@ -83,6 +94,18 @@ S7Fnk6ZVVVHsxjtaHy1uJGFlaZzKR4AGNaUTOJMs6NadzCmGPAxNQQOCqoUjn4XR
 rOjr9w349JooGXhOxbu8nOxX
 -----END PRIVATE KEY-----
 """)
+
+rsaTestKeyPssPublic = b"""
+-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAr4tmm3r20Wd/PbqvP1s2
++QEtvpuRaV8Yq40gjUR8y2Rjxa6dpG2GXHbPfvMs8ct+Lh1GH45x28Rw3Ry53mm+
+oAXjyQ86OnDkZ5N8lYbggD4O3w6M6pAvLkhk95AndTrifbIFPNU8PPMO7OyrFAHq
+gDsznjPFmTOtCEcN2Z1FpWgchwuYLPL+Wokqltd11nqqzi+bJ9cvSKADYdUAAN5W
+Utzdpiy6LbTgSxP7ociU4Tn0g5I6aDZJ7A8Lzo0KSyZYoA485mqcO0GVAdVw9lq4
+aOT9v6d+nb4bnNkQVklLQ3fVAvJm+xdDOp9LCNCN48V2pnDOkFV6+U9nV5oyc6XI
+2wIDAQAB
+-----END PUBLIC KEY-----
+"""
 
 requestTarget = "get /foo"
 
@@ -187,6 +210,15 @@ print()
 print(hardwrap(str(signed).strip(':'), 0))
 print()
 print(hardwrap('Signature: sig1=' + str(signed)))
+print()
+
+# publicKey = M2Crypto.RSA.load_key_string(rsaTestKeyPssPublic)
+
+verified = key.verify_rsassa_pss(str.encode(base), signed.value, algo='sha512')
+
+print("Verified:")
+print('> YES!' if verified else '> NO!')
+print()
 
 print('*' * 30)
 
@@ -255,6 +287,16 @@ print(hardwrap(str(signed).strip(':'), 0))
 print()
 print(oldsig + ', \\')
 print(hardwrap('  proxy_sig=' + str(signed), 4))
+print()
+
+# publicKey = M2Crypto.RSA.load_key_string(rsaTestKeyPublic)
+
+verified = key.verify(hashed, signed.value, algo='sha256')
+
+print("Verified:")
+print('> YES!' if verified else '> NO!')
+print()
+
 
 
 print('*' * 30)
@@ -294,6 +336,14 @@ print()
 print(hardwrap(str(signed).strip(':'), 0))
 print()
 print(hardwrap('Signature: sig1=' + str(signed)))
+
+print()
+
+verified = key.verify_rsassa_pss(str.encode(base), signed.value, algo='sha512')
+
+print("Verified:")
+print('> YES!' if verified else '> NO!')
+print()
 
 
 print('*' * 30)
@@ -346,6 +396,14 @@ print()
 print(hardwrap(str(signed).strip(':'), 0))
 print()
 print(hardwrap('Signature: sig1=' + str(signed)))
+print()
+
+verified = key.verify_rsassa_pss(str.encode(base), signed.value, algo='sha512')
+
+print("Verified:")
+print('> YES!' if verified else '> NO!')
+print()
+
 
 
 
@@ -402,6 +460,14 @@ print()
 print(hardwrap(str(signed).strip(':'), 0))
 print()
 print(softwrap('Signature: sig1=' + str(signed)))
+print()
+
+verified = key.verify_rsassa_pss(str.encode(base), signed.value, algo='sha512')
+
+print("Verified:")
+print('> YES!' if verified else '> NO!')
+print()
+
 
 
 
