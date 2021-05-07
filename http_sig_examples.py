@@ -238,7 +238,7 @@ sig1hd.params['key'] = 'sig1'
 coveredContent = {}
 
 coveredContent[str(sig1hd)] = str(sig1value)
-coveredContent[str("x-forwarded-for")] = "192.0.2.123"
+coveredContent[str(http_sfv.Item("x-forwarded-for"))] = "192.0.2.123"
 
 
 sigparams = http_sfv.InnerList()
@@ -265,6 +265,8 @@ base += sigparamstr
 
 print("Base string:")
 print(base)
+print()
+print(softwrap(base))
 print()
 print(softwrap(sigparamstr))
 print()
@@ -387,6 +389,8 @@ print(softwrap('Signature-Input: sig1=' + str(sigparams)))
 
 
 key = M2Crypto.RSA.load_key_string(rsaTestKeyPss)
+
+hashed = hashlib.new('sha512', str.encode(base)).digest()
 
 signed = http_sfv.Item(key.sign_rsassa_pss(str.encode(base), algo='sha512'))
 
