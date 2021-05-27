@@ -1,12 +1,21 @@
 #!/usr/bin/env python
 
 import http_sfv
-import M2Crypto
+from Cryptodome.Signature import pss
+from Cryptodome.Signature import pkcs1_15
+from Cryptodome.Hash import SHA512
+from Cryptodome.Hash import SHA256
+from Cryptodome.PublicKey import RSA
+from Cryptodome import Random
+from Cryptodome.IO import PEM
+from Cryptodome.IO import PKCS8
+from Cryptodome.Signature.pss import MGF1
 import hashlib
 import jose
 import base64
 import jose.jws
 import json
+mgf512 = lambda x, y: MGF1(x, y, SHA512)
 
 rsajwk = {
     "kid": "gnap-rsa",
@@ -30,7 +39,7 @@ rsajwkpublic = {
     "n": "hYOJ-XOKISdMMShn_G4W9m20mT0VWtQBsmBBkI2cmRt4Ai8BfYdHsFzAtYKOjpBR1RpKpJmVKxIGNy0g6Z3ad2XYsh8KowlyVy8IkZ8NMwSrcUIBZGYXjHpwjzvfGvXH_5KJlnR3_uRUp4Z4Ujk2bCaKegDn11V2vxE41hqaPUnhRZxe0jRETddzsE3mu1SK8dTCROjwUl14mUNo8iTrTm4n0qDadz8BkPo-uv4BC0bunS0K3bA_3UgVp7zBlQFoFnLTO2uWp_muLEWGl67gBq9MO3brKXfGhi3kOzywzwPTuq-cVQDyEN7aL0SxCb3Hc4IdqDaMg8qHUyObpPitDQ"
 }
 
-rsapk = b"""
+rsapk = """
 -----BEGIN PRIVATE KEY-----
 MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCFg4n5c4ohJ0wx
 KGf8bhb2bbSZPRVa1AGyYEGQjZyZG3gCLwF9h0ewXMC1go6OkFHVGkqkmZUrEgY3
@@ -61,7 +70,8 @@ HH9RwPIzguUHWmTt8y0oXyI=
 -----END PRIVATE KEY-----
 """
 
-rsacert = """MIIC6jCCAdKgAwIBAgIGAXjw74xPMA0GCSqGSIb3DQEBCwUAMDYxNDAyBgNVBAMM
+rsacert = """-----BEGIN CERTIFICATE-----
+MIIC6jCCAdKgAwIBAgIGAXjw74xPMA0GCSqGSIb3DQEBCwUAMDYxNDAyBgNVBAMM
 K05JWU15QmpzRGp5QkM5UDUzN0Q2SVR6a3BEOE50UmppOXlhcEV6QzY2bVEwHhcN
 MjEwNDIwMjAxODU0WhcNMjIwMjE0MjAxODU0WjA2MTQwMgYDVQQDDCtOSVlNeUJq
 c0RqeUJDOVA1MzdENklUemtwRDhOdFJqaTl5YXBFekM2Nm1RMIIBIjANBgkqhkiG
@@ -76,7 +86,9 @@ wHuLOSZSUmG71bZtrOcx0ptle9bp2kKl4HlSTTfbtpuG5onSa3swRNhtKtUy5NH9
 W/FLViKWfoPS3kwoEpC1XqKY6l7evoTCtS+kTQRSrCe4vbNprCAZRxz6z1nEeCgu
 NMk38yTRvx8ihZpVOuU+Ih+dOtVe/ex5IAPYxlQsvtfhsUZqc7IyCcy72WHnRHlU
 fn3pJm0S5270+Yls3Iv6h3oBAP19i906UjiUTNH3g0xMW+V4uLxgyckt4wD4Mlyv
-jnaQ7Z3sR6EsXMocAbXHIAJhwKdtU/fLgdwL5vtx"""
+jnaQ7Z3sR6EsXMocAbXHIAJhwKdtU/fLgdwL5vtx
+-----END CERTIFICATE-----
+"""
 
 
 def hardwrap(src, space = 2, width = 68):
@@ -535,11 +547,12 @@ print()
 print(softwrap('Signature-Input: sig1=' + str(sigparams)))
 print()
 
-key = M2Crypto.RSA.load_key_string(rsapk)
+key = RSA.import_key(PKCS8.unwrap(PEM.decode(rsapk)[0])[1])
 
-hashbase = hashlib.new('sha256', str.encode(base)).digest()
+h = SHA512.new(base.encode('utf-8'))
+signer = pss.new(key, mask_func=mgf512, salt_bytes=64)
 
-signed = http_sfv.Item(key.sign(hashbase, algo='sha256'))
+signed = http_sfv.Item(signer.sign(h))
 
 print("Signed:")
 print(signed)
@@ -560,11 +573,18 @@ print()
 print(hardwrap(body))
 print()
 
-verified = key.verify_rsassa_pss(str.encode(base), signed.value, algo='sha512')
+pubKey = RSA.import_key(rsacert)
+verifier = pss.new(key, mask_func=mgf512, salt_bytes=64)
 
-print("Verified:")
-print('> YES!' if verified else '> NO!')
-print()
+try:
+    verified = verifier.verify(h, signed.value)
+    print("Verified:")
+    print('> YES!')
+    print()
+except (ValueError, TypeError):
+    print("Verified:")
+    print('> NO!')
+    print()
 
 print('*' * 30)
 
