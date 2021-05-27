@@ -59,7 +59,8 @@ val sigInputStr =
      |"date": Tue, 20 Apr 2021 02:07:55 GMT
      |"content-type": application/json
      |"@signature-params": ("host" "date" "content-type");created=1618884475;keyid="test-key-rsa-pss"""".stripMargin
-val signature = "jbTIcvKyvb9Ujx0xDuDd1GD8YsJuQytESUcfWcaNWXEBh6y2RWL0Cn5jeCsVGs0CRLFhFgAkzsD2gvThWrZSW+02kNEaLVA83Auh1C3jgS0ZMZbKVU1dJICMPGhZ0VQoxr+vEOXfE3TP37vpiR6oYzJ5zgRcNAFzvnUIb5c773e/z/Rgi1p7REE/OZUHoNVGHsCz2b5mvrJ12HqIKR059UuAwRkbdkSOQJv6AZSpompbjdMuFpVHcLBzI1gwViMxGOdfpYnw7+P+AHJGmsLQLcGU+DfPle2wi6S0osMX59bT5UtLiQ++YSWQl7oujSikuRLQzAWhaEGhdBMTPlXfUA=="
+val signature = "ixyivmF5HhVUw+ilzTXd8n8ggriTxlCuGURB//4LLDf4dNiztGpfhlTojobJpai68Xbz7BhxOLR3kP7VgFjgyQOkUcMdHZWj23Uq9yiZMZkwNdquAzXk6fndlw23rld7X2waYhydU3pCslfFmD5Uh19JrAb8d9tkOXsYMhqLvniqA/N8CxKL4z/xF0gyr6WKwXyoCqR5mDf3JYSBg9it+cLTolgNt7FaolZusNYhXPgH+Oiferm5C694ndR+oqcB07sqdf5AO72cgqvA0FNAiTUGmlfWd+eMwu5ykSTGW+qPICqyqnpmHFipVuX2irB4G4TD42AIK9r1XWz0b4a/QA=="
+
 println(signature)
 val sigBytes = Base64.getDecoder.decode(signature)
 
@@ -69,7 +70,7 @@ val javaSig: java.security.Signature = {
    val rsapss = java.security.Signature.getInstance("RSASSA-PSS")
    import java.security.spec.{PSSParameterSpec, MGF1ParameterSpec}
    val pssSpec = new PSSParameterSpec(
-      "SHA-512", "MGF1", MGF1ParameterSpec.SHA512, 20, 1)
+      "SHA-512", "MGF1", MGF1ParameterSpec.SHA512, 64, 1)
    println("PSSParameterSpec=" + pssSpec)
    rsapss.setParameter(pssSpec)
    rsapss
