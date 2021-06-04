@@ -1,11 +1,15 @@
 #!/usr/bin/env python
 
 import http_sfv
+import base64
 from Cryptodome.Signature import pss
 from Cryptodome.Signature import pkcs1_15
+from Cryptodome.Signature import DSS
 from Cryptodome.Hash import SHA512
 from Cryptodome.Hash import SHA256
+from Cryptodome.Hash import HMAC
 from Cryptodome.PublicKey import RSA
+from Cryptodome.PublicKey import ECC
 from Cryptodome import Random
 from Cryptodome.IO import PEM
 from Cryptodome.IO import PKCS8
@@ -172,6 +176,21 @@ rOjr9w349JooGXhOxbu8nOxX
 -----END RSA PRIVATE KEY-----
 """
 
+eccTestKeyPrivate = """-----BEGIN EC PRIVATE KEY-----
+MHcCAQEEIFKbhfNZfpDsW43+0+JjUr9K+bTeuxopu653+hBaXGA7oAoGCCqGSM49
+AwEHoUQDQgAEqIVYZVLCrPZHGHjP17CTW0/+D9Lfw0EkjqF7xB4FivAxzic30tMM
+4GF+hR6Dxh71Z50VGGdldkkDXZCnTNnoXQ==
+-----END EC PRIVATE KEY-----
+"""
+
+eccTestKeyPublic = """-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEqIVYZVLCrPZHGHjP17CTW0/+D9Lf
+w0EkjqF7xB4FivAxzic30tMM4GF+hR6Dxh71Z50VGGdldkkDXZCnTNnoXQ==
+-----END PUBLIC KEY-----
+"""
+
+sharedSecret = """uzvJfB4u3N0Jy4T7NZ75MDVcr8zSTInedJtkgcu46YW4XByzNJjxBdtjUkdJPBtbmHhIDi6pcl8jsasjlTMtDQ=="""
+
 requestTarget = "get /foo"
 
 def hardwrap(src, space = 2, width = 68):
@@ -227,6 +246,11 @@ def softwrap(src, space = 2, width = 68, breakon = '; '):
             lout.append(l)
         out.append(('\\\n' + (' ' * space)).join(lout))
     return ('\n').join(out)
+
+print('*' * 30)
+print('* Covered Content RSAPSS Test')
+print('*' * 30)
+
 
 coveredContent = {
     str(http_sfv.Item("@request-target")): "get /foo",
@@ -299,6 +323,8 @@ print('*' * 30)
 
 
 ## reverse proxy signature
+print('* Reverse Proxy Signature ')
+print('*' * 30)
 
 # old signatures
 
@@ -383,6 +409,8 @@ except (ValueError, TypeError):
 print('*' * 30)
 
 ## minimal signature
+print('* Minimal Coverage')
+print('*' * 30)
 
 
 sigparams = http_sfv.InnerList()
@@ -439,6 +467,8 @@ print('*' * 30)
 
 
 ## header coverage
+print('* Header Coverage')
+print('*' * 30)
 
 coveredContent = {
     str(http_sfv.Item("host")): "example.com",
@@ -507,6 +537,8 @@ print('*' * 30)
 
 
 ## full coverage
+print('* Full Coverage')
+print('*' * 30)
 
 coveredContent = {
     str(http_sfv.Item("@request-target")): "post /foo?param=value&pet=dog",
@@ -574,3 +606,130 @@ except (ValueError, TypeError):
     print()
 
 print('*' * 30)
+
+## ECC
+print('* ECC Response')
+print('*' * 30)
+
+coveredContent = {
+    str(http_sfv.Item("date")): "Tue, 20 Apr 2021 02:07:56 GMT",
+    str(http_sfv.Item("content-type")): "application/json",
+    str(http_sfv.Item("digest")): "SHA-256=X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=",
+    str(http_sfv.Item("content-length")): "18"
+}
+
+sigparams = http_sfv.InnerList()
+base = '';
+for c in coveredContent:
+    i = http_sfv.Item()
+    i.parse(c.encode())
+    sigparams.append(i)
+    base += c # already serialized as an Item
+    base += ': '
+    base += coveredContent[c]
+    base += "\n"
+
+sigparams.params['created'] = 1618884475
+sigparams.params['keyid'] = 'test-key-ecc-p256'
+
+sigparamstr = ''
+sigparamstr += str(http_sfv.Item("@signature-params"))
+sigparamstr += ": "
+sigparamstr += str(sigparams)
+
+base += sigparamstr
+
+print("Base string:")
+print(base)
+print()
+print(softwrap(sigparamstr))
+print()
+print(softwrap('Signature-Input: sig1=' + str(sigparams)))
+
+key = ECC.import_key(eccTestKeyPrivate)
+
+h = SHA256.new(base.encode('utf-8'))
+signer = DSS.new(key, 'fips-186-3')
+
+signed = http_sfv.Item(signer.sign(h))
+
+print("Signed:")
+print(signed)
+print()
+print(hardwrap(str(signed).strip(':'), 0))
+print()
+print(softwrap('Signature: sig1=' + str(signed)))
+print()
+
+pubKey = ECC.import_key(eccTestKeyPublic)
+verifier = DSS.new(key, 'fips-186-3')
+
+try:
+    verified = verifier.verify(h, signed.value)
+    print("Verified:")
+    print('> YES!')
+    print()
+except (ValueError, TypeError):
+    print("Verified:")
+    print('> NO!')
+    print()
+
+print('*' * 30)
+
+
+## HMAC coverage
+print('* HMAC Coverage')
+print('*' * 30)
+
+coveredContent = {
+    str(http_sfv.Item("host")): "example.com",
+    str(http_sfv.Item("date")): "Tue, 20 Apr 2021 02:07:55 GMT",
+    str(http_sfv.Item("content-type")): "application/json",
+}
+
+sigparams = http_sfv.InnerList()
+base = '';
+for c in coveredContent:
+    i = http_sfv.Item()
+    i.parse(c.encode())
+    sigparams.append(i)
+    base += c # already serialized as an Item
+    base += ': '
+    base += coveredContent[c]
+    base += "\n"
+
+sigparams.params['created'] = 1618884475
+sigparams.params['keyid'] = 'test-shared-secret'
+
+sigparamstr = ''
+sigparamstr += str(http_sfv.Item("@signature-params"))
+sigparamstr += ": "
+sigparamstr += str(sigparams)
+
+base += sigparamstr
+
+print("Base string:")
+print(base)
+print()
+print(softwrap(sigparamstr))
+print()
+print(softwrap('Signature-Input: sig1=' + str(sigparams)))
+
+
+key = base64.b64decode(sharedSecret)
+
+signer = HMAC.new(key, digestmod=SHA256)
+signer.update(base.encode('utf-8'))
+
+signed = http_sfv.Item(signer.digest())
+
+print("Signed:")
+print(signed)
+print()
+print(hardwrap(str(signed).strip(':'), 0))
+print()
+print(hardwrap('Signature: sig1=' + str(signed)))
+print()
+
+print('*' * 30)
+
