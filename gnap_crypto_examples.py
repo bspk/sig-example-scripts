@@ -146,6 +146,129 @@ def softwrap(src, space = 2, width = 68, breakon = '; '):
     return ('\n').join(out)
 
 
+## HTTPSig Example
+
+body = """
+{
+    "access_token": {
+        "access": [
+            "dolphin-metadata"
+        ]
+    },
+    "interact": {
+        "start": ["redirect"],
+        "finish": {
+            "method": "redirect",
+            "uri": "https://client.foo/callback",
+            "nonce": "VJLO6A4CAYLBXHTR0KRO"
+        }
+    },
+    "client": {
+      "proof": "httpsig",
+      "key": {
+        "jwk": {
+            "kid": "gnap-rsa",
+            "kty": "RSA",
+            "e": "AQAB",
+            "alg": "RS256",
+            "n": "hYOJ-XOKISdMMShn_G4W9m20mT0VWtQBsmBBkI2cmRt4Ai8BfYdHsFzAtYKOjpBR1RpKpJmVKxIGNy0g6Z3ad2XYsh8KowlyVy8IkZ8NMwSrcUIBZGYXjHpwjzvfGvXH_5KJlnR3_uRUp4Z4Ujk2bCaKegDn11V2vxE41hqaPUnhRZxe0jRETddzsE3mu1SK8dTCROjwUl14mUNo8iTrTm4n0qDadz8BkPo-uv4BC0bunS0K3bA_3UgVp7zBlQFoFnLTO2uWp_muLEWGl67gBq9MO3brKXfGhi3kOzywzwPTuq-cVQDyEN7aL0SxCb3Hc4IdqDaMg8qHUyObpPitDQ"
+        }
+      }
+      "display": {
+        "name": "My Client Display Name",
+        "uri": "https://client.foo/"
+      },
+    }
+}
+"""
+print(hardwrap(body))
+print()
+print('Content-Length: ' + str(len(body)))
+print()
+
+hashed = hashlib.new('sha256', str.encode(body)).digest()
+digest = 'id-sha-256=' + base64.b64encode(hashed).decode('utf-8')
+print('Hashed:')
+print(base64.b64encode(hashed).decode('utf-8'))
+print()
+print(hardwrap('Content-Digest: ' + digest))
+print()
+
+coveredContent = {
+    str(http_sfv.Item("@method")): "POST",
+    str(http_sfv.Item("@target-uri")): "https://server.example.com/gnap",
+    str(http_sfv.Item("content-type")): "application/json",
+    str(http_sfv.Item("content-digest")): digest,
+    str(http_sfv.Item("content-length")): str(len(body))
+}
+
+sigparams = http_sfv.InnerList()
+base = '';
+for c in coveredContent:
+    i = http_sfv.Item()
+    i.parse(c.encode())
+    sigparams.append(i)
+    base += c # already serialized as an Item
+    base += ': '
+    base += coveredContent[c]
+    base += "\n"
+
+sigparams.params['created'] = 1618884475
+sigparams.params['keyid'] = rsajwk['kid']
+
+sigparamstr = ''
+sigparamstr += str(http_sfv.Item("@signature-params"))
+sigparamstr += ": "
+sigparamstr += str(sigparams)
+
+base += sigparamstr
+
+print("Base string:")
+print(softwrap(base))
+print()
+print(softwrap('Signature-Input: sig1=' + str(sigparams)))
+print()
+
+key = RSA.import_key(PKCS8.unwrap(PEM.decode(rsapk)[0])[1])
+
+h = SHA512.new(base.encode('utf-8'))
+signer = pss.new(key, mask_func=mgf512, salt_bytes=64)
+
+signed = http_sfv.Item(signer.sign(h))
+
+print("Signed:")
+print(signed)
+print()
+print(hardwrap(str(signed).strip(':'), 0))
+print()
+print(hardwrap('Signature: sig1=' + str(signed)))
+print()
+
+print("POST /gnap HTTP/1.1")
+print("Host: server.example.com")
+print("Content-Type: application/json")
+print('Content-Length: ' + str(len(body)))
+print(hardwrap('Content-Digest: ' + digest))
+print(softwrap('Signature-Input: sig1=' + str(sigparams)))
+print(hardwrap('Signature: sig1=' + str(signed)))
+print()
+print(hardwrap(body))
+print()
+
+pubKey = RSA.import_key(rsacert)
+verifier = pss.new(key, mask_func=mgf512, salt_bytes=64)
+
+try:
+    verified = verifier.verify(h, signed.value)
+    print("Verified:")
+    print('> YES!')
+    print()
+except (ValueError, TypeError):
+    print("Verified:")
+    print('> NO!')
+    print()
+
+print('*' * 30)
 
 
 ## Detached JWS Example
@@ -462,129 +585,6 @@ print("Verified:")
 print('> YES!' if verified else '> NO!')
 print()
 
-
-print('*' * 30)
-
-## HTTPSig Example
-
-body = """
-{
-    "access_token": {
-        "access": [
-            "dolphin-metadata"
-        ]
-    },
-    "interact": {
-        "start": ["redirect"],
-        "finish": {
-            "method": "redirect",
-            "uri": "https://client.foo/callback",
-            "nonce": "VJLO6A4CAYLBXHTR0KRO"
-        }
-    },
-    "client": {
-      "proof": "httpsig",
-      "key": {
-        "jwk": {
-            "kid": "gnap-rsa",
-            "kty": "RSA",
-            "e": "AQAB",
-            "alg": "RS256",
-            "n": "hYOJ-XOKISdMMShn_G4W9m20mT0VWtQBsmBBkI2cmRt4Ai8BfYdHsFzAtYKOjpBR1RpKpJmVKxIGNy0g6Z3ad2XYsh8KowlyVy8IkZ8NMwSrcUIBZGYXjHpwjzvfGvXH_5KJlnR3_uRUp4Z4Ujk2bCaKegDn11V2vxE41hqaPUnhRZxe0jRETddzsE3mu1SK8dTCROjwUl14mUNo8iTrTm4n0qDadz8BkPo-uv4BC0bunS0K3bA_3UgVp7zBlQFoFnLTO2uWp_muLEWGl67gBq9MO3brKXfGhi3kOzywzwPTuq-cVQDyEN7aL0SxCb3Hc4IdqDaMg8qHUyObpPitDQ"
-        }
-      }
-      "display": {
-        "name": "My Client Display Name",
-        "uri": "https://client.foo/"
-      },
-    }
-}
-"""
-print(hardwrap(body))
-print()
-print('Content-Length: ' + str(len(body)))
-print()
-
-hashed = hashlib.new('sha256', str.encode(body)).digest()
-print('Hashed:')
-print(base64.b64encode(hashed).decode('utf-8'))
-print()
-print(hardwrap('Digest: SHA-256=' + base64.b64encode(hashed).decode('utf-8')))
-print()
-
-coveredContent = {
-    str(http_sfv.Item("@request-target")): "post /gnap",
-    str(http_sfv.Item("host")): "server.example.com",
-    str(http_sfv.Item("content-type")): "application/json",
-    str(http_sfv.Item("digest")): "SHA-256=" + base64.b64encode(hashed).decode('utf-8'),
-    str(http_sfv.Item("content-length")): str(len(body))
-}
-
-sigparams = http_sfv.InnerList()
-base = '';
-for c in coveredContent:
-    i = http_sfv.Item()
-    i.parse(c.encode())
-    sigparams.append(i)
-    base += c # already serialized as an Item
-    base += ': '
-    base += coveredContent[c]
-    base += "\n"
-
-sigparams.params['created'] = 1618884475
-sigparams.params['keyid'] = rsajwk['kid']
-
-sigparamstr = ''
-sigparamstr += str(http_sfv.Item("@signature-params"))
-sigparamstr += ": "
-sigparamstr += str(sigparams)
-
-base += sigparamstr
-
-print("Base string:")
-print(softwrap(base))
-print()
-print(softwrap('Signature-Input: sig1=' + str(sigparams)))
-print()
-
-key = RSA.import_key(PKCS8.unwrap(PEM.decode(rsapk)[0])[1])
-
-h = SHA512.new(base.encode('utf-8'))
-signer = pss.new(key, mask_func=mgf512, salt_bytes=64)
-
-signed = http_sfv.Item(signer.sign(h))
-
-print("Signed:")
-print(signed)
-print()
-print(hardwrap(str(signed).strip(':'), 0))
-print()
-print(softwrap('Signature: sig1=' + str(signed)))
-print()
-
-print("POST /gnap HTTP/1.1")
-print("Host: server.example.com")
-print("Content-Type: application/json")
-print('Content-Length: ' + str(len(body)))
-print(hardwrap('Digest: SHA-256=' + base64.b64encode(hashed).decode('utf-8')))
-print(softwrap('Signature-Input: sig1=' + str(sigparams)))
-print(softwrap('Signature: sig1=' + str(signed)))
-print()
-print(hardwrap(body))
-print()
-
-pubKey = RSA.import_key(rsacert)
-verifier = pss.new(key, mask_func=mgf512, salt_bytes=64)
-
-try:
-    verified = verifier.verify(h, signed.value)
-    print("Verified:")
-    print('> YES!')
-    print()
-except (ValueError, TypeError):
-    print("Verified:")
-    print('> NO!')
-    print()
 
 print('*' * 30)
 

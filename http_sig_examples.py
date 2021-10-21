@@ -1,5 +1,11 @@
 #!/usr/bin/env python
 
+import json
+try:
+    from http_parser.parser import HttpParser
+except ImportError:
+    from http_parser.pyparser import HttpParser
+
 import http_sfv
 import base64
 from Cryptodome.Signature import pss
@@ -253,9 +259,9 @@ print('*' * 30)
 
 
 coveredContent = {
-    str(http_sfv.Item("@request-target")): "get /foo",
-    str(http_sfv.Item("host")): "example.org",
-    str(http_sfv.Item("date")): "Tue, 20 Apr 2021 02:07:55 GMT",
+    str(http_sfv.Item("@method")): "GET",
+    str(http_sfv.Item("@path")): "/foo",
+    str(http_sfv.Item("@authority")): "example.org",
     str(http_sfv.Item("cache-control")): "max-age=60, must-revalidate",
     str(http_sfv.Item("x-empty-header")): "",
     str(http_sfv.Item("x-example")): "Example header with some whitespace."
@@ -328,10 +334,10 @@ print('*' * 30)
 
 # old signatures
 
-oldsiginput = softwrap('Signature-Input: sig1=' + str(sigparams), 4)
-oldsig = hardwrap('Signature: sig1=' + str(signed), 4)
+oldsiginput = softwrap('Signature-Input: sig1=("@method" "@path" "@authority" "cache-control" "x-empty-header" "x-example");created=1618884475;keyid="test-key-rsa-pss"', 4);
+oldsig = hardwrap('Signature: sig1=:P0wLUszWQjoi54udOtydf9IWTfNhy+r53jGFj9XZuP4uKwxyJo1RSHi+oEF1FuX6O29d+lbxwwBao1BAgadijW+7O/PyezlTnqAOVPWx9GlyntiCiHzC87qmSQjvu1CFyFuWSjdGa3qLYYlNm7pVaJFalQiKWnUaqfT4LyttaXyoyZW84jS8gyarxAiWI97mPXU+OVM64+HVBHmnEsS+lTeIsEQo36T3NFf2CujWARPQg53r58RmpZ+J9eKR2CD6IJQvacn5A4Ix5BUAVGqlyp8JYm+S/CWJi31PNUjRRCusCVRj05NrxABNFv3r5S9IXf2fYJK+eyW4AiGVMvMcOg==:', 4)
 
-sig1value = signed
+sig1value = ':P0wLUszWQjoi54udOtydf9IWTfNhy+r53jGFj9XZuP4uKwxyJo1RSHi+oEF1FuX6O29d+lbxwwBao1BAgadijW+7O/PyezlTnqAOVPWx9GlyntiCiHzC87qmSQjvu1CFyFuWSjdGa3qLYYlNm7pVaJFalQiKWnUaqfT4LyttaXyoyZW84jS8gyarxAiWI97mPXU+OVM64+HVBHmnEsS+lTeIsEQo36T3NFf2CujWARPQg53r58RmpZ+J9eKR2CD6IJQvacn5A4Ix5BUAVGqlyp8JYm+S/CWJi31PNUjRRCusCVRj05NrxABNFv3r5S9IXf2fYJK+eyW4AiGVMvMcOg==:'
 
 sig1hd = http_sfv.Item('signature')
 sig1hd.params['key'] = 'sig1'
@@ -339,7 +345,7 @@ sig1hd.params['key'] = 'sig1'
 coveredContent = {}
 
 coveredContent[str(sig1hd)] = str(sig1value)
-coveredContent[str(http_sfv.Item("x-forwarded-for"))] = "192.0.2.123"
+coveredContent[str(http_sfv.Item("forwarded"))] = "for=192.0.2.123"
 
 
 sigparams = http_sfv.InnerList()
@@ -371,7 +377,7 @@ print(softwrap(base))
 print()
 print(softwrap(sigparamstr))
 print()
-print(softwrap(str(sig1hd) + ': ' + str(sig1value)))
+print(hardwrap(str(sig1hd) + ': ' + str(sig1value)))
 print()
 print(oldsiginput + ', \\')
 print(softwrap('  proxy_sig=' + str(sigparams), 4))
@@ -395,6 +401,82 @@ print()
 
 pubKey = RSA.import_key(rsaTestKeyPublic)
 verifier = pkcs1_15.new(key)
+
+try:
+    verified = verifier.verify(h, signed.value)
+    print("Verified:")
+    print('> YES!')
+    print()
+except (ValueError, TypeError):
+    print("Verified:")
+    print('> NO!')
+    print()
+
+print('*' * 30)
+
+## TLS reverse proxy signature
+print('* TLS Reverse Proxy Signature ')
+print('*' * 30)
+
+coveredContent = {
+    str(http_sfv.Item("@path")): "/foo",
+    str(http_sfv.Item("@query")): "Param=value&pet=Dog",
+    str(http_sfv.Item("@method")): "POST",
+    str(http_sfv.Item("@authority")): "service.internal.example",
+    str(http_sfv.Item("client-cert")): ":MIIBqDCCAU6gAwIBAgIBBzAKBggqhkjOPQQDAjA6MRswGQYDVQQKDBJMZXQncyBBdXRoZW50aWNhdGUxGzAZBgNVBAMMEkxBIEludGVybWVkaWF0ZSBDQTAeFw0yMDAxMTQyMjU1MzNaFw0yMTAxMjMyMjU1MzNaMA0xCzAJBgNVBAMMAkJDMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE8YnXXfaUgmnMtOXU/IncWalRhebrXmckC8vdgJ1p5Be5F/3YC8OthxM4+k1M6aEAEFcGzkJiNy6J84y7uzo9M6NyMHAwCQYDVR0TBAIwADAfBgNVHSMEGDAWgBRm3WjLa38lbEYCuiCPct0ZaSED2DAOBgNVHQ8BAf8EBAMCBsAwEwYDVR0lBAwwCgYIKwYBBQUHAwIwHQYDVR0RAQH/BBMwEYEPYmRjQGV4YW1wbGUuY29tMAoGCCqGSM49BAMCA0gAMEUCIBHda/r1vaL6G3VliL4/Di6YK0Q6bMjeSkC3dFCOOB8TAiEAx/kHSB4urmiZ0NX5r5XarmPk0wmuydBVoU4hBVZ1yhk=:"
+}
+
+print(hardwrap('Client-Cert: ' + coveredContent['"client-cert"']))
+print()
+
+sigparams = http_sfv.InnerList()
+base = '';
+for c in coveredContent:
+    i = http_sfv.Item()
+    i.parse(c.encode())
+    sigparams.append(i)
+    base += c # already serialized as an Item
+    base += ': '
+    base += coveredContent[c]
+    base += "\n"
+
+sigparams.params['created'] = 1618884475
+sigparams.params['keyid'] = 'test-key-ecc-p256'
+
+sigparamstr = ''
+sigparamstr += str(http_sfv.Item("@signature-params"))
+sigparamstr += ": "
+sigparamstr += str(sigparams)
+
+base += sigparamstr
+
+print("Base string:")
+print(base)
+print()
+print(hardwrap(base))
+print()
+print(softwrap(sigparamstr))
+print()
+print(softwrap('Signature-Input: ttrp=' + str(sigparams)))
+
+
+key = ECC.import_key(eccTestKeyPrivate)
+
+h = SHA256.new(base.encode('utf-8'))
+signer = DSS.new(key, 'fips-186-3')
+
+signed = http_sfv.Item(signer.sign(h))
+
+print("Signed:")
+print(signed)
+print()
+print(hardwrap(str(signed).strip(':'), 0))
+print()
+print(hardwrap('Signature: ttrp=' + str(signed)))
+print()
+
+pubKey = ECC.import_key(eccTestKeyPublic)
+verifier = DSS.new(key, 'fips-186-3')
 
 try:
     verified = verifier.verify(h, signed.value)
@@ -471,8 +553,7 @@ print('* Header Coverage')
 print('*' * 30)
 
 coveredContent = {
-    str(http_sfv.Item("host")): "example.com",
-    str(http_sfv.Item("date")): "Tue, 20 Apr 2021 02:07:55 GMT",
+    str(http_sfv.Item("@authority")): "example.com",
     str(http_sfv.Item("content-type")): "application/json",
 }
 
@@ -541,9 +622,11 @@ print('* Full Coverage')
 print('*' * 30)
 
 coveredContent = {
-    str(http_sfv.Item("@request-target")): "post /foo?param=value&pet=dog",
-    str(http_sfv.Item("host")): "example.com",
-    str(http_sfv.Item("date")): "Tue, 20 Apr 2021 02:07:55 GMT",
+    str(http_sfv.Item("date")): "Tue, 20 Apr 2021 02:07:56 GMT",
+    str(http_sfv.Item("@method")): "POST",
+    str(http_sfv.Item("@path")): "/foo",
+    str(http_sfv.Item("@query")): "?param=value&pet=dog",
+    str(http_sfv.Item("@authority")): "example.com",
     str(http_sfv.Item("content-type")): "application/json",
     str(http_sfv.Item("digest")): "SHA-256=X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=",
     str(http_sfv.Item("content-length")): "18"
@@ -589,7 +672,7 @@ print(signed)
 print()
 print(hardwrap(str(signed).strip(':'), 0))
 print()
-print(softwrap('Signature: sig1=' + str(signed)))
+print(hardwrap('Signature: sig1=' + str(signed)))
 print()
 
 pubKey = RSA.import_key(rsaTestKeyPssPublic)
@@ -612,7 +695,7 @@ print('* ECC Response')
 print('*' * 30)
 
 coveredContent = {
-    str(http_sfv.Item("date")): "Tue, 20 Apr 2021 02:07:56 GMT",
+    str(http_sfv.Item("@status")): "200",
     str(http_sfv.Item("content-type")): "application/json",
     str(http_sfv.Item("digest")): "SHA-256=X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=",
     str(http_sfv.Item("content-length")): "18"
@@ -658,7 +741,7 @@ print(signed)
 print()
 print(hardwrap(str(signed).strip(':'), 0))
 print()
-print(softwrap('Signature: sig1=' + str(signed)))
+print(hardwrap('Signature: sig1=' + str(signed)))
 print()
 
 pubKey = ECC.import_key(eccTestKeyPublic)
@@ -682,7 +765,7 @@ print('* HMAC Coverage')
 print('*' * 30)
 
 coveredContent = {
-    str(http_sfv.Item("host")): "example.com",
+    str(http_sfv.Item("@authority")): "example.com",
     str(http_sfv.Item("date")): "Tue, 20 Apr 2021 02:07:55 GMT",
     str(http_sfv.Item("content-type")): "application/json",
 }
@@ -732,4 +815,142 @@ print(hardwrap('Signature: sig1=' + str(signed)))
 print()
 
 print('*' * 30)
+
+
+## Request-Response
+print('* Request-Response')
+print('*' * 30)
+
+coveredContent = {
+    str(http_sfv.Item("@authority")): "example.com",
+    str(http_sfv.Item("content-type")): "application/json",
+}
+
+sigparams = http_sfv.InnerList()
+base = '';
+for c in coveredContent:
+    i = http_sfv.Item()
+    i.parse(c.encode())
+    sigparams.append(i)
+    base += c # already serialized as an Item
+    base += ': '
+    base += coveredContent[c]
+    base += "\n"
+
+sigparams.params['created'] = 1618884475
+sigparams.params['keyid'] = 'test-key-rsa-pss'
+
+sigparamstr = ''
+sigparamstr += str(http_sfv.Item("@signature-params"))
+sigparamstr += ": "
+sigparamstr += str(sigparams)
+
+base += sigparamstr
+
+print("Base string:")
+print(base)
+print()
+print(softwrap(sigparamstr))
+print()
+print(softwrap('Signature-Input: sig1=' + str(sigparams)))
+
+
+key = RSA.import_key(PKCS8.unwrap(PEM.decode(rsaTestKeyPssPrivate)[0])[1])
+
+h = SHA512.new(base.encode('utf-8'))
+signer = pss.new(key, mask_func=mgf512, salt_bytes=64)
+
+signed = http_sfv.Item(signer.sign(h))
+
+print("Signed:")
+print(signed)
+print()
+print(hardwrap(str(signed).strip(':'), 0))
+print()
+print(hardwrap('Signature: sig1=' + str(signed)))
+print()
+
+pubKey = RSA.import_key(rsaTestKeyPssPublic)
+verifier = pss.new(key, mask_func=mgf512, salt_bytes=64)
+
+try:
+    verified = verifier.verify(h, signed.value)
+    print("Verified:")
+    print('> YES!')
+    print()
+except (ValueError, TypeError):
+    print("Verified:")
+    print('> NO!')
+    print()
+
+coveredContent = {
+    str(http_sfv.Item("content-type")): "application/json",
+    str(http_sfv.Item("content-length")): "62",
+    str(http_sfv.Item("@status")): "200"
+}
+
+rr = http_sfv.Item("@request-response")
+rr.params["key"] = "sig1"
+coveredContent[str(rr)] = str(signed)
+
+sigparams = http_sfv.InnerList()
+base = '';
+for c in coveredContent:
+    i = http_sfv.Item()
+    i.parse(c.encode())
+    sigparams.append(i)
+    base += c # already serialized as an Item
+    base += ': '
+    base += coveredContent[c]
+    base += "\n"
+
+sigparams.params['created'] = 1618884475
+sigparams.params['keyid'] = 'test-key-ecc-p256'
+
+sigparamstr = ''
+sigparamstr += str(http_sfv.Item("@signature-params"))
+sigparamstr += ": "
+sigparamstr += str(sigparams)
+
+base += sigparamstr
+
+print("Base string:")
+print(base)
+print()
+print(hardwrap(str(rr) + ': ' + str(signed)))
+print()
+print(softwrap(sigparamstr))
+print()
+print(softwrap('Signature-Input: sig1=' + str(sigparams)))
+
+key = ECC.import_key(eccTestKeyPrivate)
+
+h = SHA256.new(base.encode('utf-8'))
+signer = DSS.new(key, 'fips-186-3')
+
+signed = http_sfv.Item(signer.sign(h))
+
+print("Signed:")
+print(signed)
+print()
+print(hardwrap(str(signed).strip(':'), 0))
+print()
+print(hardwrap('Signature: sig1=' + str(signed)))
+print()
+
+pubKey = ECC.import_key(eccTestKeyPublic)
+verifier = DSS.new(key, 'fips-186-3')
+
+try:
+    verified = verifier.verify(h, signed.value)
+    print("Verified:")
+    print('> YES!')
+    print()
+except (ValueError, TypeError):
+    print("Verified:")
+    print('> NO!')
+    print()
+
+print('*' * 30)
+
 
