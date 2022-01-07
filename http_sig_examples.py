@@ -973,8 +973,8 @@ der = DerOctetString()
 der.decode(PKCS8.unwrap(PEM.decode(ed25519TestKeyPrivate)[0])[1])
 key = SigningKey(der.payload)
 
-h = base.encode('utf-8')
-signed = http_sfv.Item(key.sign(h).signature)
+h = SHA512.new(base.encode('utf-8'))
+signed = http_sfv.Item(key.sign(h.digest()).signature)
 
 print("Signed:")
 print(signed)
@@ -995,7 +995,7 @@ bs.decode(ds[1])
 pubKey = VerifyKey(bs.payload[1:])
 
 try:
-    verified = pubKey.verify(h, signed.value)
+    verified = pubKey.verify(h.digest(), signed.value)
     print("Verified:")
     print('> YES!')
     print()
