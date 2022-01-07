@@ -27,6 +27,8 @@ from nacl.signing import SigningKey
 from nacl.signing import VerifyKey
 mgf512 = lambda x, y: MGF1(x, y, SHA512)
 
+results = dict()
+
 rsaTestKeyPublic = """-----BEGIN RSA PUBLIC KEY-----
 MIIBCgKCAQEAhAKYdtoeoy8zcAcR874L8cnZxKzAGwd7v36APp7Pv6Q2jdsPBRrw
 WEBnez6d0UDKDwGbc6nxfEXAy5mbhgajzrw3MOEt8uA5txSKobBpKDeBLOsdJKFq
@@ -255,10 +257,12 @@ try:
     verified = verifier.verify(h, signed.value)
     print("Verified:")
     print('> YES!')
+    results['Covered Content RSAPSS Test'] = 'YES'
     print()
 except (ValueError, TypeError):
     print("Verified:")
     print('> NO!')
+    results['Covered Content RSAPSS Test'] = 'NO'
     print()
 
 print('*' * 30)
@@ -342,10 +346,12 @@ try:
     verified = verifier.verify(h, signed.value)
     print("Verified:")
     print('> YES!')
+    results['Reverse Proxy'] = 'YES'
     print()
 except (ValueError, TypeError):
     print("Verified:")
     print('> NO!')
+    results['Reverse Proxy'] = 'NO'
     print()
 
 print('*' * 30)
@@ -475,10 +481,12 @@ try:
     verified = verifier.verify(h, signed.value)
     print("Verified:")
     print('> YES!')
+    results['TLS Reverse Proxy'] = 'YES'
     print()
 except (ValueError, TypeError):
     print("Verified:")
     print('> NO!')
+    results['TLS Reverse Proxy'] = 'NO'
     print()
 
 print('*' * 30)
@@ -544,10 +552,12 @@ try:
     verified = verifier.verify(h, signed.value)
     print("Verified:")
     print('> YES!')
+    results['Header Coverage'] = 'YES'
     print()
 except (ValueError, TypeError):
     print("Verified:")
     print('> NO!')
+    results['Header Coverage'] = 'NO'
     print()
 
 print('*' * 30)
@@ -618,10 +628,12 @@ try:
     verified = verifier.verify(h, signed.value)
     print("Verified:")
     print('> YES!')
+    results['Full Coverage'] = 'YES'
     print()
 except (ValueError, TypeError):
     print("Verified:")
     print('> NO!')
+    results['Full Coverage'] = 'NO'
     print()
 
 print('*' * 30)
@@ -687,10 +699,12 @@ try:
     verified = verifier.verify(h, signed.value)
     print("Verified:")
     print('> YES!')
+    results['ECC Response'] = 'YES'
     print()
 except (ValueError, TypeError):
     print("Verified:")
     print('> NO!')
+    results['ECC Response'] = 'NO'
     print()
 
 print('*' * 30)
@@ -749,6 +763,8 @@ print(hardwrap(str(signed).strip(':'), 0))
 print()
 print(hardwrap('Signature: sig1=' + str(signed)))
 print()
+
+results['HMAC'] = 'YES' # this is silly but ...
 
 print('*' * 30)
 
@@ -813,10 +829,12 @@ try:
     verified = verifier.verify(h, signed.value)
     print("Verified:")
     print('> YES!')
+    results['Request Response: Request'] = 'YES'
     print()
 except (ValueError, TypeError):
     print("Verified:")
     print('> NO!')
+    results['Request Response: Request'] = 'NO'
     print()
 
 coveredContent = {
@@ -880,11 +898,13 @@ verifier = DSS.new(key, 'fips-186-3')
 try:
     verified = verifier.verify(h, signed.value)
     print("Verified:")
+    results['Request Response: Related-Response'] = 'YES'
     print('> YES!')
     print()
 except (ValueError, TypeError):
     print("Verified:")
     print('> NO!')
+    results['Request Response: Related-Response'] = 'NO'
     print()
 
 print('*' * 30)
@@ -917,10 +937,12 @@ try:
     verified = verifier.verify(h, signed.value)
     print("Verified:")
     print('> YES!')
+    results['Static'] = 'YES'
     print()
 except (ValueError, TypeError):
     print("Verified:")
     print('> NO!')
+    results['Static'] = 'NO'
     print()
 
 print('*' * 30)
@@ -998,12 +1020,22 @@ try:
     verified = pubKey.verify(h.digest(), signed.value)
     print("Verified:")
     print('> YES!')
+    results['Ed25519'] = 'YES'
     print()
 except (ValueError, TypeError):
     print("Verified:")
     print('> NO!')
+    results['Ed25519'] = 'YES'
     print()
 
-
-
 print('*' * 30)
+
+
+print('Results:')
+print()
+print('+' + '-' * 37 + '+' + '-' * 6 + '+')
+for k,v in results.items():
+    print ("| {:>35} | {:<4} |".format(k, v))
+print('+' + '-' * 37 + '+' + '-' * 6 + '+')
+
+print()
