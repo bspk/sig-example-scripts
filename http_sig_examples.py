@@ -995,8 +995,8 @@ der = DerOctetString()
 der.decode(PKCS8.unwrap(PEM.decode(ed25519TestKeyPrivate)[0])[1])
 key = SigningKey(der.payload)
 
-h = SHA512.new(base.encode('utf-8'))
-signed = http_sfv.Item(key.sign(h.digest()).signature)
+h = base.encode('utf-8')
+signed = http_sfv.Item(key.sign(h).signature)
 
 print("Signed:")
 print(signed)
@@ -1017,7 +1017,7 @@ bs.decode(ds[1])
 pubKey = VerifyKey(bs.payload[1:])
 
 try:
-    verified = pubKey.verify(h.digest(), signed.value)
+    verified = pubKey.verify(h, signed.value)
     print("Verified:")
     print('> YES!')
     results['Ed25519'] = 'YES'
@@ -1033,9 +1033,11 @@ print('*' * 30)
 
 print('Results:')
 print()
-print('+' + '-' * 37 + '+' + '-' * 6 + '+')
+print('+' + '-' * 37 + '+' + '-' * 5 + '+')
+print ("| {:>35} | {:<3} |".format('Test', 'OK?'))
+print('+' + '·' * 37 + '+' + '·' * 5 + '+')
 for k,v in results.items():
-    print ("| {:>35} | {:<4} |".format(k, v))
-print('+' + '-' * 37 + '+' + '-' * 6 + '+')
+    print ("| {:>35} | {:<3} |".format(k, v))
+print('+' + '-' * 37 + '+' + '-' * 5 + '+')
 
 print()
