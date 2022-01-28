@@ -7,6 +7,7 @@ except ImportError:
     from http_parser.pyparser import HttpParser
 
 import http_sfv
+from urllib.parse import parse_qs
 import base64
 from Cryptodome.Signature import pss
 from Cryptodome.Signature import pkcs1_15
@@ -135,7 +136,135 @@ MCowBQYDK2VwAyEAJrQLj5P/89iXES9+vFgrIy29clF9CC/oPPsw3c5D0bs=
 -----END PUBLIC KEY-----
 """
 
-requestTarget = "get /foo"
+p256PubKey = """-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEWAO+Y/BP3c7Aw7dSWYGkuckwl/e6
+H54D/P9uzXDjby0Frysdpcny/NL807iRVfVDDg+ctHhuRTzBwP+lwVdN2g==
+-----END PUBLIC KEY-----
+"""
+
+p256PrvKey = """-----BEGIN EC PRIVATE KEY-----
+MHcCAQEEIMLnTZwmWikcBCrKlXZVUjaq9jwsv22sy/P7yIIonkVwoAoGCCqGSM49
+AwEHoUQDQgAEWAO+Y/BP3c7Aw7dSWYGkuckwl/e6H54D/P9uzXDjby0Frysdpcny
+/NL807iRVfVDDg+ctHhuRTzBwP+lwVdN2g==
+-----END EC PRIVATE KEY-----
+"""
+
+exampleRequestMessage = b"""POST /foo?param=Value&Pet=dog HTTP/1.1
+Host: example.com
+Date: Tue, 20 Apr 2021 02:07:55 GMT
+Content-Type: application/json
+Content-Digest: sha-512=:WZDPaVn/7XgHaAy8pmojAkGWoRx2UFChF41A2svX+TaPm+AbwAgBWnrIiYllu7BNNyealdVLvRwEmTHWXvJwew==:
+Content-Length: 18
+
+{"hello": "world"}"""
+
+exampleReverseProxyMessage = b"""
+POST /foo?param=Value&Pet=dog HTTP/1.1
+Host: example.com
+Date: Tue, 20 Apr 2021 02:07:55 GMT
+Content-Type: application/json
+Content-Digest: sha-512=:WZDPaVn/7XgHaAy8pmojAkGWoRx2UFChF41A2svX+TaPm+AbwAgBWnrIiYllu7BNNyealdVLvRwEmTHWXvJwew==:
+Content-Length: 18
+Forwarded: for=192.0.2.123
+Signature-Input: sig1=("@method" "@authority" "@path" "content-digest" "content-length" "content-type");created=1618884475;keyid="test-key-rsa-pss"
+Signature:  sig1=:LAH8BjcfcOcLojiuOBFWn0P5keD3xAOuJRGziCLuD8r5MW9S0RoXXLzLSRfGY/3SF8kVIkHjE13SEFdTo4Af/fJ/Pu9wheqoLVdwXyY/UkBIS1M8Brc8IODsn5DFIrG0IrburbLi0uCc+E2ZIIb6HbUJ+o+jP58JelMTe0QE3IpWINTEzpxjqDf5/Df+InHCAkQCTuKsamjWXUpyOT1Wkxi7YPVNOjW4MfNuTZ9HdbD2Tr65+BXeTG9ZS/9SWuXAc+BZ8WyPz0QRz//ec3uWXd7bYYODSjRAxHqX+S1ag3LZElYyUKaAIjZ8MGOt4gXEwCSLDv/zqxZeWLj/PDkn6w==:
+
+{"hello": "world"}
+"""
+
+exampleClientCertMessage = b"""POST /foo?param=Value&Pet=dog HTTP/1.1
+Host: service.internal.example
+Date: Tue, 20 Apr 2021 02:07:55 GMT
+Content-Type: application/json
+Content-Length: 18
+Client-Cert: :MIIBqDCCAU6gAwIBAgIBBzAKBggqhkjOPQQDAjA6MRswGQYDVQQKDBJMZXQncyBBdXRoZW50aWNhdGUxGzAZBgNVBAMMEkxBIEludGVybWVkaWF0ZSBDQTAeFw0yMDAxMTQyMjU1MzNaFw0yMTAxMjMyMjU1MzNaMA0xCzAJBgNVBAMMAkJDMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE8YnXXfaUgmnMtOXU/IncWalRhebrXmckC8vdgJ1p5Be5F/3YC8OthxM4+k1M6aEAEFcGzkJiNy6J84y7uzo9M6NyMHAwCQYDVR0TBAIwADAfBgNVHSMEGDAWgBRm3WjLa38lbEYCuiCPct0ZaSED2DAOBgNVHQ8BAf8EBAMCBsAwEwYDVR0lBAwwCgYIKwYBBQUHAwIwHQYDVR0RAQH/BBMwEYEPYmRjQGV4YW1wbGUuY29tMAoGCCqGSM49BAMCA0gAMEUCIBHda/r1vaL6G3VliL4/Di6YK0Q6bMjeSkC3dFCOOB8TAiEAx/kHSB4urmiZ0NX5r5XarmPk0wmuydBVoU4hBVZ1yhk=:
+
+{"hello": "world"}
+"""
+
+exampleResponseMessage = b"""HTTP/1.1 200 OK
+Date: Tue, 20 Apr 2021 02:07:56 GMT
+Content-Type: application/json
+Content-Digest: sha-512=:JlEy2bfUz7WrWIjc1qV6KVLpdr/7L5/L4h7Sxvh6sNHpDQWDCL+GauFQWcZBvVDhiyOnAQsxzZFYwi0wDH+1pw==:
+Content-Length: 23
+
+{"message": "good dog"}"""
+
+exampleRequestResponseMessage = b"""HTTP/1.1 503 Service Unavailable
+Date: Tue, 20 Apr 2021 02:07:56 GMT
+Content-Type: application/json
+Content-Length: 62
+
+{"busy": true, "message": "Your call is very important to us"}
+"""
+
+structuredFields = {
+    'accept': 'list',
+    'accept-encoding': 'list',
+    'accept-language': 'list',
+    'accept-patch': 'list',
+    'accept-ranges': 'list',
+    'access-control-allow-credentials': 'item',
+    'access-control-allow-headers': 'list',
+    'access-control-allow-methods': 'list',
+    'access-control-allow-origin': 'item',
+    'access-control-expose-headers': 'list',
+    'access-control-max-age': 'item',
+    'access-control-request-headers': 'list',
+    'access-control-request-method': 'item',
+    'age': 'item',
+    'allow': 'list',
+    'alpn': 'list',
+    'alt-svc': 'dict',
+    'alt-used': 'item',
+    'cache-control': 'dict',
+    'connection': 'list',
+    'content-encoding': 'list',
+    'content-language': 'list',
+    'content-length': 'list',
+    'content-type': 'item',
+    'cross-origin-resource-policy': 'item',
+    'expect': 'item',
+    'expect-ct': 'dict',
+    'host': 'item',
+    'keep-alive': 'dict',
+    'origin': 'item',
+    'pragma': 'dict',
+    'prefer': 'dict',
+    'preference-applied': 'dict',
+    'retry-after': 'item',
+    'surrogate-control': 'dict',
+    'te': 'list',
+    'timing-allow-origin': 'list',
+    'trailer': 'list',
+    'transfer-encoding': 'list',
+    'vary': 'list',
+    'x-content-type-options': 'item',
+    'x-frame-options': 'item',
+    'x-xss-protection': 'list',
+    "cache-status": "list",
+    "proxy-status": "list",
+    "variant-key": "list",
+    "variants": "dict",
+    "signature": "dict",
+    "signature-input": "dict",
+    "priority": "dict",
+    "x-dictionary": "dict",
+    "x-list": "list",
+    "x-list-a": "list",
+    "x-list-b": "list",
+    "accept-ch": "list",
+    "example-list": "list",
+    "example-dict": "dict",
+    "example-integer": "item",
+    "example-decimal": "item",
+    "example-string": "item",
+    "example-token": "item",
+    "example-bytesequence": "item",
+    "example-boolean": "item",
+    "cdn-cache-control": "dict"
+}
+
 
 def hardwrap(src, space = 2, width = 68):
     lines = src.split('\n') # split existing lines
@@ -191,47 +320,359 @@ def softwrap(src, space = 2, width = 68, breakon = '; '):
         out.append(('\\\n' + (' ' * space)).join(lout))
     return ('\n').join(out)
 
+
+def parse_components(msg):
+    p = HttpParser()
+    p.execute(msg, len(msg))
+    
+    response = {}
+    
+    response['fields'] = []
+    for h in p.get_headers():
+        cid = http_sfv.Item(h.lower())
+        response['fields'].append(
+            {
+                'id': cid.value,
+                'cid': str(cid),
+                'val': p.get_headers()[h] # Note: this normalizes the header value for us
+            }
+        )
+        # see if this is a known structured field
+        if h and h.lower() in structuredFields:
+            if structuredFields[h.lower()] == 'dict':
+                sv = http_sfv.Dictionary()
+                sv.parse(p.get_headers()[h].encode('utf-8'))
+            
+                for k in sv:
+                    cid = http_sfv.Item(h.lower())
+                    cid.params['key'] = k
+                    response['fields'].append(
+                        {
+                            'id': cid.value,
+                            'cid': str(cid),
+                            'key': k,
+                            'val': str(sv[k])
+                        }
+                    )
+            
+                cid = http_sfv.Item(h.lower())
+                cid.params['sf'] = True
+                response['fields'].append(
+                    {
+                        'id': cid.value,
+                        'cid': str(cid),
+                        'sf': True,
+                        'val': str(sv)
+                    }
+                )
+            elif structuredFields[h.lower()] == 'list':
+                sv = http_sfv.List()
+                sv.parse(p.get_headers()[h].encode('utf-8'))
+            
+                cid = http_sfv.Item(h.lower())
+                cid.params['sf'] = True
+                response['fields'].append(
+                    {
+                        'id': cid.value,
+                        'cid': str(cid),
+                        'sf': True,
+                        'val': str(sv)
+                    }
+                )
+            elif structuredFields[h.lower()] == 'item':
+                sv = http_sfv.Item()
+                sv.parse(p.get_headers()[h].encode('utf-8'))
+        
+                cid = http_sfv.Item(h.lower())
+                cid.params['sf'] = True
+                response['fields'].append(
+                    {
+                        'id': cid.value,
+                        'cid': str(cid),
+                        'sf': True,
+                        'val': str(sv)
+                    }
+                )
+
+    if p.get_status_code():
+        # response
+        response['derived'] = [
+            {
+                'id': '@status',
+                'cid': str(http_sfv.Item('@status')),
+                'val': str(p.get_status_code())
+            }
+        ]
+    else:
+        # request
+        response['derived'] = [
+            {
+                'id': '@method',
+                'cid': str(http_sfv.Item('@method')),
+                'val': p.get_method()
+            },
+            {
+                'id': '@target-uri',
+                'cid': str(http_sfv.Item('@target-uri')),
+                'val': 
+                'https://' # TODO: this always assumes an HTTP connection for demo purposes
+                    + p.get_headers()['host'] # TODO: this library assumes HTTP 1.1
+                    + p.get_url()
+            },
+            {
+                'id': '@authority',
+                'cid': str(http_sfv.Item('@authority')),
+                'val':  p.get_headers()['host'] # TODO: this library assumes HTTP 1.1
+            },
+            {
+                'id': '@scheme',
+                'cid': str(http_sfv.Item('@scheme')),
+                'val':  'https' # TODO: this always assumes an HTTPS connection for demo purposes
+            },
+            {
+                'id': '@request-target',
+                'cid': str(http_sfv.Item('@request-target')),
+                'val':  p.get_url()
+            },
+            {
+                'id': '@path',
+                'cid': str(http_sfv.Item('@path')),
+                'val':  p.get_path()
+            },
+            {
+                'id': '@query',
+                'cid': str(http_sfv.Item('@query')),
+                'val':  p.get_query_string()
+            }
+        ]
+
+        qs = parse_qs(p.get_query_string())
+        for q in qs:
+            v = qs[q]
+            if len(v) == 1:
+                cid = http_sfv.Item('@query-param')
+                cid.params['name'] = q
+                response['derived'].append(
+                    {
+                        'id': cid.value,
+                        'cid': str(cid),
+                        'name': q,
+                        'val': v[0]
+                    }
+                )
+            elif len(v) > 1:
+                # Multiple values, undefined behavior?
+                for i in range(len(v)):
+                    cid = http_sfv.Item('@query-param')
+                    cid.params['name'] = q
+                    response['derived'].append(
+                        {
+                            'id': cid.value,
+                            'cid': str(cid),
+                            'name': q,
+                            'val': v[i],
+                            'idx': i
+                        }
+                    )
+
+    if 'signature-input' in p.get_headers():
+        # existing signatures, parse the values
+        siginputheader = http_sfv.Dictionary()
+        siginputheader.parse(p.get_headers()['signature-input'].encode('utf-8'))
+        
+        sigheader = http_sfv.Dictionary()
+        sigheader.parse(p.get_headers()['signature'].encode('utf-8'))
+        
+        siginputs = {}
+        for (k,v) in siginputheader.items():
+            
+            existingComponents = []
+            for c in v:
+                cc = { # holder object
+                    'id': c.value,
+                    'cid': str(c)
+                }
+                if not cc['id'].startswith('@'):
+                    # it's a header, try to get the existing value
+                    fields = (f for f in response['fields'] if f['id'] == cc['id'])
+                    if 'sf' in c.params:
+                        cc['sf'] = c.params['sf']
+                        cc['val'] = next((f['val'] for f in fields if f['sf'] == c.params['sf']), None)
+                    elif 'key' in c.params:
+                        cc['key'] = i.params['key']
+                        cc['val'] = next((f['val'] for f in fields if f['key'] == c.params['key']), None)
+                    else:
+                        cc['val'] = next((f['val'] for f in fields if ('key' not in f and 'sf' not in f)), None)
+                else:
+                    # it's derived
+                    derived = (d for d in response['derived'] if d['id'] == cc['id'])
+                    
+                    if cc['id'] == '@query-param' and 'name' in c.params:
+                        cc['name'] = c.params['name']
+                        cc['val'] = next((d['val'] for d in derived if d['name'] == c.params['name']), None)
+                    else:
+                        cc['val'] = next((d['val'] for d in derived if ('name' not in d)), None)
+
+                existingComponents.append(cc)
+            
+            siginput = {
+                'coveredComponents': existingComponents,
+                'params': {p:pv for (p,pv) in v.params.items()},
+                'value': str(v),
+                'signature': str(sigheader[k])
+            }
+            siginputs[k] = siginput
+            
+        response['inputSignatures'] = siginputs
+
+    return response
+    
+
+def generate_input(components, coveredComponents, params):
+    sigparams = http_sfv.InnerList()
+    base = ''
+
+    for cc in coveredComponents:
+        c = cc['id']
+        if not c.startswith('@'):
+            # it's a header
+            i = http_sfv.Item(c.lower())
+
+            if 'key' in cc:
+                # try a dictionary header value
+                i.params['key'] = cc['key']
+                comp = next((x for x in components['fields'] if 'key' in x and x['id'] == c and x['key'] == cc['key']), None)
+                                
+                sigparams.append(i)
+                base += str(i)
+                base += ': '
+                base += comp['val']
+                base += "\n"
+            elif 'sf' in cc:
+                i.params['sf'] = True
+                comp = next((x for x in components['fields'] if x['id'] == c), None)
+                sigparams.append(i)
+                base += str(i)
+                base += ': '
+                base += comp['val']
+                base += "\n"
+            else:
+                comp = next((x for x in components['fields'] if x['id'] == c), None)
+                sigparams.append(i)
+                base += str(i)
+                base += ': '
+                base += comp['val']
+                base += "\n"
+        else:
+            # it's a derived value
+            i = http_sfv.Item(c)
+            
+            if 'key' in cc and c == '@request-response':
+                # request-response has a 'key' field
+                i.params['key'] = cc['key']
+                comp = next((x for x in components['derived'] if 'key' in x and x['id'] == c and x['key'] == cc['key']), None)
+                                
+                sigparams.append(i)
+                base += str(i)
+                base += ': '
+                base += comp['val']
+                base += "\n"
+            elif 'name' in cc and c == '@query-param':
+                # query-param has a 'name' field
+                i.params['name'] = cc['name']
+                comp = next((x for x in components['derived'] if 'name' in x and x['id'] == c and x['name'] == cc['name']), None)
+                                
+                sigparams.append(i)
+                base += str(i)
+                base += ': '
+                base += comp['val']
+                base += "\n"
+            else:
+                comp = next((x for x in components['derived'] if x['id'] == c), None)
+
+                sigparams.append(i)
+                base += str(i)
+                base += ': '
+                base += comp['val']
+                base += "\n"
+
+    if 'created' in params:
+        sigparams.params['created'] = params['created']
+    
+    if 'expires' in params:
+        sigparams.params['expires'] = params['expires']
+    
+    if 'keyid' in params:
+        sigparams.params['keyid'] = params['keyid']
+    
+    if 'nonce' in params:
+        sigparams.params['nonce'] = params['nonce']
+    
+    if 'alg' in params:
+        sigparams.params['alg'] = params['alg']
+
+    sigparamstr = ''
+    sigparamstr += str(http_sfv.Item("@signature-params")) # never any parameters
+    sigparamstr += ': '
+    sigparamstr += str(sigparams)
+    
+    base += sigparamstr
+    
+    response = {
+        'signatureInput': base,
+        'signatureParams': sigparams
+    }
+    
+    return response
+
+print('*' * 30)
+print('* Example Messages')
+print('*' * 30)
+
+print()
+print(hardwrap(exampleRequestMessage.decode()))
+print()
+print(hardwrap(exampleResponseMessage.decode()))
+print()
+
+## Base example pieces
+
 print('*' * 30)
 print('* Covered Content RSAPSS Test')
 print('*' * 30)
 
 
-coveredContent = {
-    str(http_sfv.Item("@method")): "GET",
-    str(http_sfv.Item("@path")): "/foo",
-    str(http_sfv.Item("@authority")): "example.org",
-    str(http_sfv.Item("cache-control")): "max-age=60, must-revalidate",
-    str(http_sfv.Item("x-empty-header")): "",
-    str(http_sfv.Item("x-example")): "Example header with some whitespace."
-}
+components = parse_components(exampleRequestMessage)
 
-sigparams = http_sfv.InnerList()
-base = '';
-for c in coveredContent:
-    i = http_sfv.Item()
-    i.parse(c.encode())
-    sigparams.append(i)
-    base += c # already serialized as an Item
-    base += ': '
-    base += coveredContent[c]
-    base += "\n"
+siginput = generate_input(
+    components, 
+    ( # covered components list
+        { 'id': "@method" }, 
+        { 'id': "@authority" },
+        { 'id': "@path" },
+        { 'id': "content-digest" },
+        { 'id': "content-length" },
+        { 'id': "content-type" }
+    ),
+    {
+        'created': 1618884473,
+        'keyid': 'test-key-rsa-pss'
+    }
+)
 
-sigparams.params['created'] = 1618884475
-sigparams.params['keyid'] = 'test-key-rsa-pss'
-
-sigparamstr = ''
-sigparamstr += str(http_sfv.Item("@signature-params"))
-sigparamstr += ": "
-sigparamstr += str(sigparams)
-
-base += sigparamstr
+base = siginput['signatureInput']
+sigparams = siginput['signatureParams']
 
 print("Base string:")
+print()
 print(base)
 print()
-print(softwrap(sigparamstr))
+print(hardwrap(base))
+print()
+print(softwrap(base))
 print()
 print(softwrap('Signature-Input: sig1=' + str(sigparams)))
+print()
 
 key = RSA.import_key(PKCS8.unwrap(PEM.decode(rsaTestKeyPssPrivate)[0])[1])
 
@@ -241,6 +682,7 @@ signer = pss.new(key, mask_func=mgf512, salt_bytes=64)
 signed = http_sfv.Item(signer.sign(h))
 
 print("Signed:")
+print()
 print(signed)
 print()
 print(hardwrap(str(signed).strip(':'), 0))
@@ -267,61 +709,49 @@ except (ValueError, TypeError):
 
 print('*' * 30)
 
-
 ## reverse proxy signature
 print('* Reverse Proxy Signature ')
 print('*' * 30)
 
-# old signatures
+# Message with existing signatures and added headers
+components = parse_components(exampleReverseProxyMessage)
 
-oldsiginput = softwrap('Signature-Input: sig1=("@method" "@path" "@authority" "cache-control" "x-empty-header" "x-example");created=1618884475;keyid="test-key-rsa-pss"', 4);
-oldsig = hardwrap('Signature: sig1=:P0wLUszWQjoi54udOtydf9IWTfNhy+r53jGFj9XZuP4uKwxyJo1RSHi+oEF1FuX6O29d+lbxwwBao1BAgadijW+7O/PyezlTnqAOVPWx9GlyntiCiHzC87qmSQjvu1CFyFuWSjdGa3qLYYlNm7pVaJFalQiKWnUaqfT4LyttaXyoyZW84jS8gyarxAiWI97mPXU+OVM64+HVBHmnEsS+lTeIsEQo36T3NFf2CujWARPQg53r58RmpZ+J9eKR2CD6IJQvacn5A4Ix5BUAVGqlyp8JYm+S/CWJi31PNUjRRCusCVRj05NrxABNFv3r5S9IXf2fYJK+eyW4AiGVMvMcOg==:', 4)
+siginput = generate_input(
+    components, 
+    ( # covered components list
+        { 'id': "signature", 'key': 'sig1' }, 
+        { 'id': "forwarded" }
+    ),
+    {
+        'created': 1618884480,
+        'keyid': 'test-key-rsa',
+        'alg': 'rsa-v1_5-sha256',
+        'expires': 1618884540
+    }
+)
 
-sig1value = ':P0wLUszWQjoi54udOtydf9IWTfNhy+r53jGFj9XZuP4uKwxyJo1RSHi+oEF1FuX6O29d+lbxwwBao1BAgadijW+7O/PyezlTnqAOVPWx9GlyntiCiHzC87qmSQjvu1CFyFuWSjdGa3qLYYlNm7pVaJFalQiKWnUaqfT4LyttaXyoyZW84jS8gyarxAiWI97mPXU+OVM64+HVBHmnEsS+lTeIsEQo36T3NFf2CujWARPQg53r58RmpZ+J9eKR2CD6IJQvacn5A4Ix5BUAVGqlyp8JYm+S/CWJi31PNUjRRCusCVRj05NrxABNFv3r5S9IXf2fYJK+eyW4AiGVMvMcOg==:'
-
-sig1hd = http_sfv.Item('signature')
-sig1hd.params['key'] = 'sig1'
-
-coveredContent = {}
-
-coveredContent[str(sig1hd)] = str(sig1value)
-coveredContent[str(http_sfv.Item("forwarded"))] = "for=192.0.2.123"
-
-
-sigparams = http_sfv.InnerList()
-base = '';
-for c in coveredContent:
-    i = http_sfv.Item()
-    i.parse(c.encode())
-    sigparams.append(i)
-    base += c # already serialized as an Item
-    base += ': '
-    base += coveredContent[c]
-    base += "\n"
-
-sigparams.params['created'] = 1618884480
-sigparams.params['keyid'] = 'test-key-rsa'
-sigparams.params['alg'] = 'rsa-v1_5-sha256'
-
-sigparamstr = ''
-sigparamstr += str(http_sfv.Item("@signature-params"))
-sigparamstr += ": "
-sigparamstr += str(sigparams)
-
-base += sigparamstr
+base = siginput['signatureInput']
+sigparams = siginput['signatureParams']
 
 print("Base string:")
+print()
 print(base)
+print()
+print(hardwrap(base))
 print()
 print(softwrap(base))
 print()
-print(softwrap(sigparamstr))
+print(softwrap(exampleReverseProxyMessage.decode()))
 print()
-print(hardwrap(str(sig1hd) + ': ' + str(sig1value)))
+print(softwrap(exampleReverseProxyMessage.decode(), 4))
 print()
-print(oldsiginput + ', \\')
+print(hardwrap(exampleReverseProxyMessage.decode()))
+print()
+print(hardwrap(exampleReverseProxyMessage.decode(), 4))
+print()
+print(', \\')
 print(softwrap('  proxy_sig=' + str(sigparams), 4))
-
+print()
 
 key = RSA.import_key(rsaTestKeyPrivate)
 
@@ -331,16 +761,17 @@ signer = pkcs1_15.new(key)
 signed = http_sfv.Item(signer.sign(h))
 
 print("Signed:")
+print()
 print(signed)
 print()
 print(hardwrap(str(signed).strip(':'), 0))
 print()
-print(oldsig + ', \\')
+print(', \\')
 print(hardwrap('  proxy_sig=' + str(signed), 4))
 print()
 
 pubKey = RSA.import_key(rsaTestKeyPublic)
-verifier = pkcs1_15.new(key)
+verifier = pkcs1_15.new(pubKey)
 
 try:
     verified = verifier.verify(h, signed.value)
@@ -360,47 +791,41 @@ print('*' * 30)
 print('* TLS Reverse Proxy Signature ')
 print('*' * 30)
 
-coveredContent = {
-    str(http_sfv.Item("@path")): "/foo",
-    str(http_sfv.Item("@query")): "Param=value&pet=Dog",
-    str(http_sfv.Item("@method")): "POST",
-    str(http_sfv.Item("@authority")): "service.internal.example",
-    str(http_sfv.Item("client-cert")): ":MIIBqDCCAU6gAwIBAgIBBzAKBggqhkjOPQQDAjA6MRswGQYDVQQKDBJMZXQncyBBdXRoZW50aWNhdGUxGzAZBgNVBAMMEkxBIEludGVybWVkaWF0ZSBDQTAeFw0yMDAxMTQyMjU1MzNaFw0yMTAxMjMyMjU1MzNaMA0xCzAJBgNVBAMMAkJDMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE8YnXXfaUgmnMtOXU/IncWalRhebrXmckC8vdgJ1p5Be5F/3YC8OthxM4+k1M6aEAEFcGzkJiNy6J84y7uzo9M6NyMHAwCQYDVR0TBAIwADAfBgNVHSMEGDAWgBRm3WjLa38lbEYCuiCPct0ZaSED2DAOBgNVHQ8BAf8EBAMCBsAwEwYDVR0lBAwwCgYIKwYBBQUHAwIwHQYDVR0RAQH/BBMwEYEPYmRjQGV4YW1wbGUuY29tMAoGCCqGSM49BAMCA0gAMEUCIBHda/r1vaL6G3VliL4/Di6YK0Q6bMjeSkC3dFCOOB8TAiEAx/kHSB4urmiZ0NX5r5XarmPk0wmuydBVoU4hBVZ1yhk=:"
-}
+# message with client cert header
+components = parse_components(exampleClientCertMessage)
 
-print(hardwrap('Client-Cert: ' + coveredContent['"client-cert"']))
-print()
+siginput = generate_input(
+    components, 
+    ( # covered components list
+        { 'id': "@path" },
+        { 'id': '@query' },
+        { 'id': "@method" }, 
+        { 'id': "@authority" },
+        { 'id': "client-cert" }
+    ),
+    {
+        'created': 1618884473,
+        'keyid': 'test-key-ecc-p256'
+    }
+)
 
-sigparams = http_sfv.InnerList()
-base = '';
-for c in coveredContent:
-    i = http_sfv.Item()
-    i.parse(c.encode())
-    sigparams.append(i)
-    base += c # already serialized as an Item
-    base += ': '
-    base += coveredContent[c]
-    base += "\n"
-
-sigparams.params['created'] = 1618884475
-sigparams.params['keyid'] = 'test-key-ecc-p256'
-
-sigparamstr = ''
-sigparamstr += str(http_sfv.Item("@signature-params"))
-sigparamstr += ": "
-sigparamstr += str(sigparams)
-
-base += sigparamstr
+base = siginput['signatureInput']
+sigparams = siginput['signatureParams']
 
 print("Base string:")
+print()
 print(base)
 print()
 print(hardwrap(base))
 print()
-print(softwrap(sigparamstr))
+print(softwrap(base))
+print()
+print(softwrap(exampleClientCertMessage.decode()))
+print()
+print(hardwrap(exampleClientCertMessage.decode()))
 print()
 print(softwrap('Signature-Input: ttrp=' + str(sigparams)))
-
+print()
 
 key = ECC.import_key(eccTestKeyPrivate)
 
@@ -410,6 +835,7 @@ signer = DSS.new(key, 'fips-186-3')
 signed = http_sfv.Item(signer.sign(h))
 
 print("Signed:")
+print()
 print(signed)
 print()
 print(hardwrap(str(signed).strip(':'), 0))
@@ -418,16 +844,18 @@ print(hardwrap('Signature: ttrp=' + str(signed)))
 print()
 
 pubKey = ECC.import_key(eccTestKeyPublic)
-verifier = DSS.new(key, 'fips-186-3')
+verifier = DSS.new(pubKey, 'fips-186-3')
 
 try:
     verified = verifier.verify(h, signed.value)
     print("Verified:")
     print('> YES!')
+    results['TTRP'] = 'YES'
     print()
 except (ValueError, TypeError):
     print("Verified:")
     print('> NO!')
+    results['TTRP'] = 'NO'
     print()
 
 print('*' * 30)
@@ -437,26 +865,32 @@ print('* Minimal Coverage')
 print('*' * 30)
 
 
-sigparams = http_sfv.InnerList()
-base = '';
+components = parse_components(exampleRequestMessage)
 
-sigparams.params['created'] = 1618884475
-sigparams.params['keyid'] = 'test-key-rsa-pss'
-sigparams.params['alg'] = 'rsa-pss-sha512'
+siginput = generate_input(
+    components, 
+    ( # covered components list
+    ),
+    {
+        'created': 1618884473,
+        'keyid': 'test-key-rsa-pss',
+        'nonce': 'b3k2pp5k7z-50gnwp.yemd'
+    }
+)
 
-sigparamstr = ''
-sigparamstr += str(http_sfv.Item("@signature-params"))
-sigparamstr += ": "
-sigparamstr += str(sigparams)
-
-base += sigparamstr
+base = siginput['signatureInput']
+sigparams = siginput['signatureParams']
 
 print("Base string:")
+print()
 print(base)
 print()
-print(softwrap(sigparamstr))
+print(hardwrap(base))
 print()
-print(softwrap('Signature-Input: sig1=' + str(sigparams)))
+print(softwrap(base))
+print()
+print(softwrap('Signature-Input: sig-b21=' + str(sigparams)))
+print()
 
 key = RSA.import_key(PKCS8.unwrap(PEM.decode(rsaTestKeyPssPrivate)[0])[1])
 
@@ -470,7 +904,7 @@ print(signed)
 print()
 print(hardwrap(str(signed).strip(':'), 0))
 print()
-print(hardwrap('Signature: sig1=' + str(signed)))
+print(hardwrap('Signature: sig-b21=' + str(signed)))
 
 print()
 
@@ -481,54 +915,47 @@ try:
     verified = verifier.verify(h, signed.value)
     print("Verified:")
     print('> YES!')
-    results['TLS Reverse Proxy'] = 'YES'
+    results['Minimal Coverage'] = 'YES'
     print()
 except (ValueError, TypeError):
     print("Verified:")
     print('> NO!')
-    results['TLS Reverse Proxy'] = 'NO'
+    results['TLSMinimal Coverage'] = 'NO'
     print()
 
 print('*' * 30)
-
 
 ## header coverage
 print('* Header Coverage')
 print('*' * 30)
 
-coveredContent = {
-    str(http_sfv.Item("@authority")): "example.com",
-    str(http_sfv.Item("content-type")): "application/json",
-}
+components = parse_components(exampleRequestMessage)
 
-sigparams = http_sfv.InnerList()
-base = '';
-for c in coveredContent:
-    i = http_sfv.Item()
-    i.parse(c.encode())
-    sigparams.append(i)
-    base += c # already serialized as an Item
-    base += ': '
-    base += coveredContent[c]
-    base += "\n"
+siginput = generate_input(
+    components, 
+    ( # covered components list
+        { 'id': "@authority" },
+        { 'id': "content-digest" }
+    ),
+    {
+        'created': 1618884473,
+        'keyid': 'test-key-rsa-pss'
+    }
+)
 
-sigparams.params['created'] = 1618884475
-sigparams.params['keyid'] = 'test-key-rsa-pss'
-
-sigparamstr = ''
-sigparamstr += str(http_sfv.Item("@signature-params"))
-sigparamstr += ": "
-sigparamstr += str(sigparams)
-
-base += sigparamstr
+base = siginput['signatureInput']
+sigparams = siginput['signatureParams']
 
 print("Base string:")
+print()
 print(base)
 print()
-print(softwrap(sigparamstr))
+print(hardwrap(base))
 print()
-print(softwrap('Signature-Input: sig1=' + str(sigparams)))
-
+print(softwrap(base))
+print()
+print(softwrap('Signature-Input: sig-b22=' + str(sigparams)))
+print()
 
 key = RSA.import_key(PKCS8.unwrap(PEM.decode(rsaTestKeyPssPrivate)[0])[1])
 
@@ -538,11 +965,12 @@ signer = pss.new(key, mask_func=mgf512, salt_bytes=64)
 signed = http_sfv.Item(signer.sign(h))
 
 print("Signed:")
+print()
 print(signed)
 print()
 print(hardwrap(str(signed).strip(':'), 0))
 print()
-print(hardwrap('Signature: sig1=' + str(signed)))
+print(hardwrap('Signature: sig-b22=' + str(signed)))
 print()
 
 pubKey = RSA.import_key(rsaTestKeyPssPublic)
@@ -562,49 +990,43 @@ except (ValueError, TypeError):
 
 print('*' * 30)
 
-
 ## full coverage
 print('* Full Coverage')
 print('*' * 30)
 
-coveredContent = {
-    str(http_sfv.Item("date")): "Tue, 20 Apr 2021 02:07:56 GMT",
-    str(http_sfv.Item("@method")): "POST",
-    str(http_sfv.Item("@path")): "/foo",
-    str(http_sfv.Item("@query")): "?param=value&pet=dog",
-    str(http_sfv.Item("@authority")): "example.com",
-    str(http_sfv.Item("content-type")): "application/json",
-    str(http_sfv.Item("digest")): "SHA-256=X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=",
-    str(http_sfv.Item("content-length")): "18"
-}
+components = parse_components(exampleRequestMessage)
 
-sigparams = http_sfv.InnerList()
-base = '';
-for c in coveredContent:
-    i = http_sfv.Item()
-    i.parse(c.encode())
-    sigparams.append(i)
-    base += c # already serialized as an Item
-    base += ': '
-    base += coveredContent[c]
-    base += "\n"
+siginput = generate_input(
+    components, 
+    ( # covered components list
+        { 'id': "date" },
+        { 'id': "@method" },
+        { 'id': "@path" },
+        { 'id': "@query" },
+        { 'id': "@authority" },
+        { 'id': "content-type" },
+        { 'id': "content-digest" },
+        { 'id': "content-length" }
+    ),
+    {
+        'created': 1618884473,
+        'keyid': 'test-key-rsa-pss'
+    }
+)
 
-sigparams.params['created'] = 1618884475
-sigparams.params['keyid'] = 'test-key-rsa-pss'
-
-sigparamstr = ''
-sigparamstr += str(http_sfv.Item("@signature-params"))
-sigparamstr += ": "
-sigparamstr += str(sigparams)
-
-base += sigparamstr
+base = siginput['signatureInput']
+sigparams = siginput['signatureParams']
 
 print("Base string:")
+print()
 print(base)
 print()
-print(softwrap(sigparamstr))
+print(hardwrap(base))
 print()
-print(softwrap('Signature-Input: sig1=' + str(sigparams)))
+print(softwrap(base))
+print()
+print(softwrap('Signature-Input: sig-b23=' + str(sigparams)))
+print()
 
 key = RSA.import_key(PKCS8.unwrap(PEM.decode(rsaTestKeyPssPrivate)[0])[1])
 
@@ -618,7 +1040,7 @@ print(signed)
 print()
 print(hardwrap(str(signed).strip(':'), 0))
 print()
-print(hardwrap('Signature: sig1=' + str(signed)))
+print(hardwrap('Signature: sig-b23=' + str(signed)))
 print()
 
 pubKey = RSA.import_key(rsaTestKeyPssPublic)
@@ -642,40 +1064,35 @@ print('*' * 30)
 print('* ECC Response')
 print('*' * 30)
 
-coveredContent = {
-    str(http_sfv.Item("@status")): "200",
-    str(http_sfv.Item("content-type")): "application/json",
-    str(http_sfv.Item("digest")): "SHA-256=X48E9qOokqqrvdts8nOJRJN3OWDUoyWxBf7kbu9DBPE=",
-    str(http_sfv.Item("content-length")): "18"
-}
+components = parse_components(exampleResponseMessage)
 
-sigparams = http_sfv.InnerList()
-base = '';
-for c in coveredContent:
-    i = http_sfv.Item()
-    i.parse(c.encode())
-    sigparams.append(i)
-    base += c # already serialized as an Item
-    base += ': '
-    base += coveredContent[c]
-    base += "\n"
+siginput = generate_input(
+    components, 
+    ( # covered components list
+        { 'id': "@status" },
+        { 'id': "content-type" },
+        { 'id': "content-digest" },
+        { 'id': "content-length" }
+    ),
+    {
+        'created': 1618884473,
+        'keyid': 'test-key-ecc-p256'
+    }
+)
 
-sigparams.params['created'] = 1618884475
-sigparams.params['keyid'] = 'test-key-ecc-p256'
-
-sigparamstr = ''
-sigparamstr += str(http_sfv.Item("@signature-params"))
-sigparamstr += ": "
-sigparamstr += str(sigparams)
-
-base += sigparamstr
+base = siginput['signatureInput']
+sigparams = siginput['signatureParams']
 
 print("Base string:")
+print()
 print(base)
 print()
-print(softwrap(sigparamstr))
+print(hardwrap(base))
 print()
-print(softwrap('Signature-Input: sig1=' + str(sigparams)))
+print(softwrap(base))
+print()
+print(softwrap('Signature-Input: sig-b24=' + str(sigparams)))
+print()
 
 key = ECC.import_key(eccTestKeyPrivate)
 
@@ -685,15 +1102,16 @@ signer = DSS.new(key, 'fips-186-3')
 signed = http_sfv.Item(signer.sign(h))
 
 print("Signed:")
+print()
 print(signed)
 print()
 print(hardwrap(str(signed).strip(':'), 0))
 print()
-print(hardwrap('Signature: sig1=' + str(signed)))
+print(hardwrap('Signature: sig-b24=' + str(signed)))
 print()
 
 pubKey = ECC.import_key(eccTestKeyPublic)
-verifier = DSS.new(key, 'fips-186-3')
+verifier = DSS.new(pubKey, 'fips-186-3')
 
 try:
     verified = verifier.verify(h, signed.value)
@@ -709,45 +1127,38 @@ except (ValueError, TypeError):
 
 print('*' * 30)
 
-
 ## HMAC coverage
 print('* HMAC Coverage')
 print('*' * 30)
 
-coveredContent = {
-    str(http_sfv.Item("@authority")): "example.com",
-    str(http_sfv.Item("date")): "Tue, 20 Apr 2021 02:07:55 GMT",
-    str(http_sfv.Item("content-type")): "application/json",
-}
+components = parse_components(exampleRequestMessage)
 
-sigparams = http_sfv.InnerList()
-base = '';
-for c in coveredContent:
-    i = http_sfv.Item()
-    i.parse(c.encode())
-    sigparams.append(i)
-    base += c # already serialized as an Item
-    base += ': '
-    base += coveredContent[c]
-    base += "\n"
+siginput = generate_input(
+    components, 
+    ( # covered components list
+        { 'id': "date" },
+        { 'id': "@authority" },
+        { 'id': "content-type" }
+    ),
+    {
+        'created': 1618884473,
+        'keyid': 'test-shared-secret'
+    }
+)
 
-sigparams.params['created'] = 1618884475
-sigparams.params['keyid'] = 'test-shared-secret'
-
-sigparamstr = ''
-sigparamstr += str(http_sfv.Item("@signature-params"))
-sigparamstr += ": "
-sigparamstr += str(sigparams)
-
-base += sigparamstr
+base = siginput['signatureInput']
+sigparams = siginput['signatureParams']
 
 print("Base string:")
+print()
 print(base)
 print()
-print(softwrap(sigparamstr))
+print(hardwrap(base))
 print()
-print(softwrap('Signature-Input: sig1=' + str(sigparams)))
-
+print(softwrap(base))
+print()
+print(softwrap('Signature-Input: sig-b25=' + str(sigparams)))
+print()
 
 key = base64.b64decode(sharedSecret)
 
@@ -757,125 +1168,70 @@ signer.update(base.encode('utf-8'))
 signed = http_sfv.Item(signer.digest())
 
 print("Signed:")
+print()
 print(signed)
 print()
 print(hardwrap(str(signed).strip(':'), 0))
 print()
-print(hardwrap('Signature: sig1=' + str(signed)))
+print(hardwrap('Signature: sig-b25=' + str(signed)))
 print()
 
-results['HMAC'] = 'YES' # this is silly but ...
+results['HMAC'] = 'LOL' # this is silly but ...
 
 print('*' * 30)
-
 
 ## Request-Response
 print('* Request-Response')
 print('*' * 30)
 
-coveredContent = {
-    str(http_sfv.Item("@authority")): "example.com",
-    str(http_sfv.Item("content-type")): "application/json",
-}
+reqComponents = parse_components(exampleReverseProxyMessage)
+components = parse_components(exampleRequestResponseMessage)
 
-sigparams = http_sfv.InnerList()
-base = '';
-for c in coveredContent:
-    i = http_sfv.Item()
-    i.parse(c.encode())
-    sigparams.append(i)
-    base += c # already serialized as an Item
-    base += ': '
-    base += coveredContent[c]
-    base += "\n"
+# Manually add in the request-response component from the request components
 
-sigparams.params['created'] = 1618884475
-sigparams.params['keyid'] = 'test-key-rsa-pss'
+comp = next((x for x in reqComponents['fields'] if 'key' in x and x['id'] == 'signature' and x['key'] == 'sig1'), None)
 
-sigparamstr = ''
-sigparamstr += str(http_sfv.Item("@signature-params"))
-sigparamstr += ": "
-sigparamstr += str(sigparams)
+comp['id'] = '@request-response'
+comp['key'] = 'sig1'
+comp['cid'] = '"@request-response";key="sig1"'
 
-base += sigparamstr
+components['derived'].append(comp)
 
-print("Base string:")
-print(base)
-print()
-print(softwrap(sigparamstr))
-print()
-print(softwrap('Signature-Input: sig1=' + str(sigparams)))
+siginput = generate_input(
+    components, 
+    ( # covered components list
+        { 'id': "@status" },
+        { 'id': "content-length" },
+        { 'id': "content-type" },
+        { 'id': "@request-response", 'key': "sig1" }
+    ),
+    {
+        'created': 1618884479,
+        'keyid': 'test-key-ecc-p256'
+    }
+)
 
-
-key = RSA.import_key(PKCS8.unwrap(PEM.decode(rsaTestKeyPssPrivate)[0])[1])
-
-h = SHA512.new(base.encode('utf-8'))
-signer = pss.new(key, mask_func=mgf512, salt_bytes=64)
-
-signed = http_sfv.Item(signer.sign(h))
-
-print("Signed:")
-print(signed)
-print()
-print(hardwrap(str(signed).strip(':'), 0))
-print()
-print(hardwrap('Signature: sig1=' + str(signed)))
-print()
-
-pubKey = RSA.import_key(rsaTestKeyPssPublic)
-verifier = pss.new(pubKey, mask_func=mgf512, salt_bytes=64)
-
-try:
-    verified = verifier.verify(h, signed.value)
-    print("Verified:")
-    print('> YES!')
-    results['Request Response: Request'] = 'YES'
-    print()
-except (ValueError, TypeError):
-    print("Verified:")
-    print('> NO!')
-    results['Request Response: Request'] = 'NO'
-    print()
-
-coveredContent = {
-    str(http_sfv.Item("content-type")): "application/json",
-    str(http_sfv.Item("content-length")): "62",
-    str(http_sfv.Item("@status")): "200"
-}
-
-rr = http_sfv.Item("@request-response")
-rr.params["key"] = "sig1"
-coveredContent[str(rr)] = str(signed)
-
-sigparams = http_sfv.InnerList()
-base = '';
-for c in coveredContent:
-    i = http_sfv.Item()
-    i.parse(c.encode())
-    sigparams.append(i)
-    base += c # already serialized as an Item
-    base += ': '
-    base += coveredContent[c]
-    base += "\n"
-
-sigparams.params['created'] = 1618884475
-sigparams.params['keyid'] = 'test-key-ecc-p256'
-
-sigparamstr = ''
-sigparamstr += str(http_sfv.Item("@signature-params"))
-sigparamstr += ": "
-sigparamstr += str(sigparams)
-
-base += sigparamstr
+base = siginput['signatureInput']
+sigparams = siginput['signatureParams']
 
 print("Base string:")
+print()
 print(base)
 print()
-print(hardwrap(str(rr) + ': ' + str(signed)))
+print(hardwrap(base))
 print()
-print(softwrap(sigparamstr))
+print(softwrap(base))
 print()
-print(softwrap('Signature-Input: sig1=' + str(sigparams)))
+print(softwrap(exampleReverseProxyMessage.decode()))
+print()
+print(hardwrap(exampleReverseProxyMessage.decode()))
+print()
+print(softwrap(exampleRequestResponseMessage.decode()))
+print()
+print(hardwrap(exampleRequestResponseMessage.decode()))
+print()
+print(softwrap('Signature-Input: reqres=' + str(sigparams)))
+print()
 
 key = ECC.import_key(eccTestKeyPrivate)
 
@@ -889,11 +1245,11 @@ print(signed)
 print()
 print(hardwrap(str(signed).strip(':'), 0))
 print()
-print(hardwrap('Signature: sig1=' + str(signed)))
+print(hardwrap('Signature: reqres=' + str(signed)))
 print()
 
 pubKey = ECC.import_key(eccTestKeyPublic)
-verifier = DSS.new(key, 'fips-186-3')
+verifier = DSS.new(pubKey, 'fips-186-3')
 
 try:
     verified = verifier.verify(h, signed.value)
@@ -909,26 +1265,53 @@ except (ValueError, TypeError):
 
 print('*' * 30)
 
+# Static signature test
 
-print('HTTPSig Static Test')
+print('HTTPSig Static Test 1')
 print('*' * 30)
 
 
-base = '''"@method": GET
-"@path": /foo
-"@authority": example.org
-"cache-control": max-age=60, must-revalidate
-"x-empty-header": 
-"x-example": Example header with some whitespace.
-"@signature-params": ("@method" "@path" "@authority" "cache-control" "x-empty-header" "x-example");created=1618884475;keyid="test-key-rsa-pss"'''
+components = parse_components(exampleReverseProxyMessage)
+
+siginput = generate_input(
+    components, 
+    ( # covered components list
+        { 'id': "@method" },
+        { 'id': "@authority" },
+        { 'id': "@path" },
+        { 'id': "content-digest"},
+        { 'id': "content-length"},
+        { 'id': "content-type"}
+    ),
+    {
+        'created': 1618884473,
+        'keyid': 'test-key-rsa-pss'
+    }
+)
+
+base = siginput['signatureInput']
+sigparams = siginput['signatureParams']
+
+print("Base string:")
+print()
+print(base)
+print()
+print(hardwrap(base))
+print()
+print(softwrap(base))
+print()
+print(softwrap(exampleReverseProxyMessage.decode()))
+print()
+print(hardwrap(exampleReverseProxyMessage.decode()))
+print()
+print(softwrap('Signature-Input: reqres=' + str(sigparams)))
+print()
 
 h = SHA512.new(base.encode('utf-8'))
 
 signed = http_sfv.Item()
 
-signed.parse(':P0wLUszWQjoi54udOtydf9IWTfNhy+r53jGFj9XZuP4uKwxyJo1RSHi+oEF1FuX6O29d+lbxwwBao1BAgadijW+7O/PyezlTnqAOVPWx9GlyntiCiHzC87qmSQjvu1CFyFuWSjdGa3qLYYlNm7pVaJFalQiKWnUaqfT4LyttaXyoyZW84jS8gyarxAiWI97mPXU+OVM64+HVBHmnEsS+lTeIsEQo36T3NFf2CujWARPQg53r58RmpZ+J9eKR2CD6IJQvacn5A4Ix5BUAVGqlyp8JYm+S/CWJi31PNUjRRCusCVRj05NrxABNFv3r5S9IXf2fYJK+eyW4AiGVMvMcOg==:'.encode('utf-8'))
-
-#signed.parse(':Gu5RuUzQ1R3tAs9RbgsMfhnrRaNiJ6IbxLmu2wSvjntnlaEwUrJIU8zazmbxbqx5+ioz/rAgICAIjOtOfRnynJwCX2cVmXcQsVvsYpnlUYR2ChnNIThgRj5WoVGpvzs91KsPhP2cn7a92ZLhfNsfd7jbTGS6GgZUvc8GW8EHwN5hQ10PIu7EwSeIiKDOpGWbsErEeg46rM2VxtJD+pObC82+E+hgdBPzWOCgOCmZex02OPOr/6UBO0Sb8TQ5XT3dG0QOiNzRPEN2e3gKkwhGMPFuPeHj1Sminnb/A+7L6o2KmT2d/cRmR5TN44WADCpQiqzxJHp/tSVW328pDjxCEQ==:'.encode('utf-8'))
+signed.parse(':LAH8BjcfcOcLojiuOBFWn0P5keD3xAOuJRGziCLuD8r5MW9S0RoXXLzLSRfGY/3SF8kVIkHjE13SEFdTo4Af/fJ/Pu9wheqoLVdwXyY/UkBIS1M8Brc8IODsn5DFIrG0IrburbLi0uCc+E2ZIIb6HbUJ+o+jP58JelMTe0QE3IpWINTEzpxjqDf5/Df+InHCAkQCTuKsamjWXUpyOT1Wkxi7YPVNOjW4MfNuTZ9HdbD2Tr65+BXeTG9ZS/9SWuXAc+BZ8WyPz0QRz//ec3uWXd7bYYODSjRAxHqX+S1ag3LZElYyUKaAIjZ8MGOt4gXEwCSLDv/zqxZeWLj/PDkn6w==:'.encode('utf-8'))
 
 pubKey = RSA.import_key(rsaTestKeyPssPublic)
 verifier = pss.new(pubKey, mask_func=mgf512, salt_bytes=64)
@@ -937,58 +1320,91 @@ try:
     verified = verifier.verify(h, signed.value)
     print("Verified:")
     print('> YES!')
-    results['Static'] = 'YES'
+    results['Static 1'] = 'YES'
     print()
 except (ValueError, TypeError):
     print("Verified:")
     print('> NO!')
-    results['Static'] = 'NO'
+    results['Static 1'] = 'NO'
     print()
 
 print('*' * 30)
 
+# Static signature test
+
+print('HTTPSig Static Test 3')
+print('*' * 30)
+
+
+base = '''"@method": POST
+"@authority": example.com
+"@path": /foo
+"content-digest": sha-512=:WZDPaVn/7XgHaAy8pmojAkGWoRx2UFChF41A2svX+TaPm+AbwAgBWnrIiYllu7BNNyealdVLvRwEmTHWXvJwew==:
+"content-length": 18
+"content-type": application/json
+"@signature-params": ("@method" "@authority" "@path" "content-digest" "content-length" "content-type");created=1618884473;keyid="test-key-rsa-pss"'''
+
+h = SHA512.new(base.encode('utf-8'))
+
+signed = http_sfv.Item()
+
+signed.parse(':LAH8BjcfcOcLojiuOBFWn0P5keD3xAOuJRGziCLuD8r5MW9S0RoXXLzLSRfGY/3SF8kVIkHjE13SEFdTo4Af/fJ/Pu9wheqoLVdwXyY/UkBIS1M8Brc8IODsn5DFIrG0IrburbLi0uCc+E2ZIIb6HbUJ+o+jP58JelMTe0QE3IpWINTEzpxjqDf5/Df+InHCAkQCTuKsamjWXUpyOT1Wkxi7YPVNOjW4MfNuTZ9HdbD2Tr65+BXeTG9ZS/9SWuXAc+BZ8WyPz0QRz//ec3uWXd7bYYODSjRAxHqX+S1ag3LZElYyUKaAIjZ8MGOt4gXEwCSLDv/zqxZeWLj/PDkn6w==:'.encode('utf-8'))
+
+pubKey = RSA.import_key(rsaTestKeyPssPublic)
+verifier = pss.new(pubKey, mask_func=mgf512, salt_bytes=64)
+
+try:
+    verified = verifier.verify(h, signed.value)
+    print("Verified:")
+    print('> YES!')
+    results['Static 3'] = 'YES'
+    print()
+except (ValueError, TypeError):
+    print("Verified:")
+    print('> NO!')
+    results['Static 3'] = 'NO'
+    print()
+
+print('*' * 30)
 
 ## ED 25519
 print('ed25519 signature')
 print('*' * 30)
 
-coveredContent = {
-    str(http_sfv.Item("date")): "Tue, 20 Apr 2021 02:07:56 GMT",
-    str(http_sfv.Item("@method")): "POST",
-    str(http_sfv.Item("@path")): "/foo",
-    str(http_sfv.Item("@authority")): "example.com",
-    str(http_sfv.Item("content-type")): "application/json",
-    str(http_sfv.Item("content-length")): "18"
-}
+print('* Full Coverage')
+print('*' * 30)
 
-sigparams = http_sfv.InnerList()
-base = '';
-for c in coveredContent:
-    i = http_sfv.Item()
-    i.parse(c.encode())
-    sigparams.append(i)
-    base += c # already serialized as an Item
-    base += ': '
-    base += coveredContent[c]
-    base += "\n"
+components = parse_components(exampleRequestMessage)
 
-sigparams.params['created'] = 1618884475
-sigparams.params['keyid'] = 'test-key-ed25519'
+siginput = generate_input(
+    components, 
+    ( # covered components list
+        { 'id': "date" },
+        { 'id': "@method" },
+        { 'id': "@path" },
+        { 'id': "@authority" },
+        { 'id': "content-type" },
+        { 'id': "content-length" }
+    ),
+    {
+        'created': 1618884473,
+        'keyid': 'test-key-ed25519'
+    }
+)
 
-sigparamstr = ''
-sigparamstr += str(http_sfv.Item("@signature-params"))
-sigparamstr += ": "
-sigparamstr += str(sigparams)
-
-base += sigparamstr
+base = siginput['signatureInput']
+sigparams = siginput['signatureParams']
 
 print("Base string:")
+print()
 print(base)
 print()
-print(softwrap(sigparamstr))
+print(hardwrap(base))
 print()
-print(softwrap('Signature-Input: sig1=' + str(sigparams)))
-
+print(softwrap(base))
+print()
+print(softwrap('Signature-Input: sig-b26=' + str(sigparams)))
+print()
 
 # Unpack private key, format is not supported by Cryptodomex PEM parser
 der = DerOctetString()
@@ -1003,7 +1419,7 @@ print(signed)
 print()
 print(hardwrap(str(signed).strip(':'), 0))
 print()
-print(hardwrap('Signature: sig1=' + str(signed)))
+print(hardwrap('Signature: sig-b26=' + str(signed)))
 print()
 
 # Unpack public key, format is not supported by Cryptodomex PEM parser
@@ -1029,6 +1445,41 @@ except (ValueError, TypeError):
     print()
 
 print('*' * 30)
+
+# Static HTTP test (ECC)
+print('HTTPSig Static Test 2')
+print('*' * 30)
+
+
+base = '''"@authority": example.com
+"date": Tue, 20 Apr 2021 02:07:55 GMT
+"content-type": application/json
+"@signature-params": ("@authority" "date" "content-type");created=1618884475;keyid="test-key-p256"'''
+
+h = SHA256.new(base.encode('utf-8'))
+
+signed = http_sfv.Item()
+
+signed.parse(':qsAR/kVQiTST/oyJfHust6m1Z6qKTrAF7GKPPtRN7LyasFY3PW8t+0U9Fn9wNeXeZ7MVwZjw2LAxbh8gxT2LYg==:'.encode('utf-8'))
+
+pubKey = ECC.import_key(p256PubKey)
+verifier = DSS.new(pubKey, 'fips-186-3')
+
+try:
+    verified = verifier.verify(h, signed.value)
+    print("Verified:")
+    print('> YES!')
+    results['Static 2'] = 'YES'
+    print()
+except (ValueError, TypeError):
+    print("Verified:")
+    print('> NO!')
+    results['Static 2'] = 'NO'
+    print()
+
+print('*' * 30)
+
+
 
 
 print('Results:')
