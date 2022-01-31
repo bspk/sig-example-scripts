@@ -442,7 +442,7 @@ def parse_components(msg):
             {
                 'id': '@query',
                 'cid': str(http_sfv.Item('@query')),
-                'val':  p.get_query_string()
+                'val':  '?' + p.get_query_string()
             }
         ]
 
@@ -550,7 +550,7 @@ def generate_input(components, coveredComponents, params):
                 base += "\n"
             elif 'sf' in cc:
                 i.params['sf'] = True
-                comp = next((x for x in components['fields'] if x['id'] == c), None)
+                comp = next((x for x in components['fields'] if 'sf' in x and x['id'] == c and x['sf'] == cc['sf']), None)
                 sigparams.append(i)
                 base += str(i)
                 base += ': '
@@ -1479,9 +1479,58 @@ except (ValueError, TypeError):
 
 print('*' * 30)
 
+# Static Header formatting
+print('Static header formatting')
+print('*' * 30)
+
+msg = b"""GET / HTTP/1.1
+Host: www.example.com
+Date: Tue, 20 Apr 2021 02:07:56 GMT
+X-OWS-Header:   Leading and trailing whitespace.
+X-Obs-Fold-Header: Obsolete
+    line folding.
+Cache-Control: max-age=60
+Cache-Control:    must-revalidate
+Example-Dict:  a=1,    b=2;x=1;y=2,   c=(a   b   c)
+"""
+
+components = parse_components(msg)
+
+siginput = generate_input(
+    components, 
+    ( # covered components list
+        { 'id': "host" },
+        { 'id': "date" },
+        { 'id': "x-ows-header" },
+        { 'id': "x-obs-fold-header" },
+        { 'id': "cache-control" },
+        { 'id': "example-dict" },
+        { 'id': "example-dict", 'sf': True },
+        { 'id': "example-dict", 'key': 'a' },
+        { 'id': "example-dict", 'key': 'b' },
+        { 'id': "example-dict", 'key': 'c' }
+    ),
+    {
+    }
+)
+
+base = siginput['signatureInput']
+sigparams = siginput['signatureParams']
+
+print("Base string:")
+print()
+print(base)
+print()
+print(hardwrap(base))
+print()
+print(softwrap(base))
+print()
 
 
+print('*' * 30)
 
+
+print()
 print('Results:')
 print()
 print('+' + '-' * 37 + '+' + '-' * 5 + '+')
