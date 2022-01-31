@@ -1371,9 +1371,6 @@ print('*' * 30)
 print('ed25519 signature')
 print('*' * 30)
 
-print('* Full Coverage')
-print('*' * 30)
-
 components = parse_components(exampleRequestMessage)
 
 siginput = generate_input(
