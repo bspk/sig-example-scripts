@@ -149,28 +149,37 @@ AwEHoUQDQgAEWAO+Y/BP3c7Aw7dSWYGkuckwl/e6H54D/P9uzXDjby0Frysdpcny
 -----END EC PRIVATE KEY-----
 """
 
-exampleRequestMessage = b"""POST /foo?param=Value&Pet=dog HTTP/1.1
+def addContentDigest(message, body):
+    b64Digest = base64.b64encode(SHA512.new(body).digest()).decode('utf-8')
+    contentDigest = "sha-512=:%s:" % b64Digest
+    contentLength = len(body)
+    return message.format(
+        contentDigest=contentDigest,
+        contentLength=contentLength,
+        body=body.decode('utf-8'),
+    ).encode('utf-8')
+
+exampleRequestMessage = addContentDigest("""POST /foo?param=Value&Pet=dog HTTP/1.1
 Host: example.com
 Date: Tue, 20 Apr 2021 02:07:55 GMT
 Content-Type: application/json
-Content-Digest: sha-512=:WZDPaVn/7XgHaAy8pmojAkGWoRx2UFChF41A2svX+TaPm+AbwAgBWnrIiYllu7BNNyealdVLvRwEmTHWXvJwew==:
-Content-Length: 18
+Content-Digest: {contentDigest}
+Content-Length: {contentLength}
 
-{"hello": "world"}"""
+{body}""", b"""{"hello": "world"}""")
 
-exampleReverseProxyMessage = b"""
+exampleReverseProxyMessage = addContentDigest("""
 POST /foo?param=Value&Pet=dog HTTP/1.1
 Host: example.com
 Date: Tue, 20 Apr 2021 02:07:55 GMT
 Content-Type: application/json
-Content-Digest: sha-512=:WZDPaVn/7XgHaAy8pmojAkGWoRx2UFChF41A2svX+TaPm+AbwAgBWnrIiYllu7BNNyealdVLvRwEmTHWXvJwew==:
-Content-Length: 18
+Content-Digest: {contentDigest}
+Content-Length: {contentLength}
 Forwarded: for=192.0.2.123
 Signature-Input: sig1=("@method" "@authority" "@path" "content-digest" "content-length" "content-type");created=1618884475;keyid="test-key-rsa-pss"
 Signature:  sig1=:LAH8BjcfcOcLojiuOBFWn0P5keD3xAOuJRGziCLuD8r5MW9S0RoXXLzLSRfGY/3SF8kVIkHjE13SEFdTo4Af/fJ/Pu9wheqoLVdwXyY/UkBIS1M8Brc8IODsn5DFIrG0IrburbLi0uCc+E2ZIIb6HbUJ+o+jP58JelMTe0QE3IpWINTEzpxjqDf5/Df+InHCAkQCTuKsamjWXUpyOT1Wkxi7YPVNOjW4MfNuTZ9HdbD2Tr65+BXeTG9ZS/9SWuXAc+BZ8WyPz0QRz//ec3uWXd7bYYODSjRAxHqX+S1ag3LZElYyUKaAIjZ8MGOt4gXEwCSLDv/zqxZeWLj/PDkn6w==:
 
-{"hello": "world"}
-"""
+{body}""", b"""{"hello": "world"}""")
 
 exampleClientCertMessage = b"""POST /foo?param=Value&Pet=dog HTTP/1.1
 Host: service.internal.example
@@ -182,13 +191,13 @@ Client-Cert: :MIIBqDCCAU6gAwIBAgIBBzAKBggqhkjOPQQDAjA6MRswGQYDVQQKDBJMZXQncyBBdX
 {"hello": "world"}
 """
 
-exampleResponseMessage = b"""HTTP/1.1 200 OK
+exampleResponseMessage = addContentDigest("""HTTP/1.1 200 OK
 Date: Tue, 20 Apr 2021 02:07:56 GMT
 Content-Type: application/json
-Content-Digest: sha-512=:JlEy2bfUz7WrWIjc1qV6KVLpdr/7L5/L4h7Sxvh6sNHpDQWDCL+GauFQWcZBvVDhiyOnAQsxzZFYwi0wDH+1pw==:
-Content-Length: 23
+Content-Digest: {contentDigest}
+Content-Length: {contentLength}
 
-{"message": "good dog"}"""
+{body}""", b"""{"message": "good dog"}""")
 
 exampleRequestResponseMessage = b"""HTTP/1.1 503 Service Unavailable
 Date: Tue, 20 Apr 2021 02:07:56 GMT
