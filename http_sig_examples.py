@@ -153,7 +153,6 @@ exampleRequestMessage = b"""POST /foo?param=Value&Pet=dog HTTP/1.1
 Host: example.com
 Date: Tue, 20 Apr 2021 02:07:55 GMT
 Content-Type: application/json
-Content-Digest: sha-512=:WZDPaVn/7XgHaAy8pmojAkGWoRx2UFChF41A2svX+TaPm+AbwAgBWnrIiYllu7BNNyealdVLvRwEmTHWXvJwew==:
 Content-Length: 18
 
 {"hello": "world"}"""
@@ -163,7 +162,6 @@ POST /foo?param=Value&Pet=dog HTTP/1.1
 Host: example.com
 Date: Tue, 20 Apr 2021 02:07:55 GMT
 Content-Type: application/json
-Content-Digest: sha-512=:WZDPaVn/7XgHaAy8pmojAkGWoRx2UFChF41A2svX+TaPm+AbwAgBWnrIiYllu7BNNyealdVLvRwEmTHWXvJwew==:
 Content-Length: 18
 Forwarded: for=192.0.2.123
 Signature-Input: sig1=("@method" "@authority" "@path" "content-digest" "content-length" "content-type");created=1618884475;keyid="test-key-rsa-pss"
@@ -185,7 +183,6 @@ Client-Cert: :MIIBqDCCAU6gAwIBAgIBBzAKBggqhkjOPQQDAjA6MRswGQYDVQQKDBJMZXQncyBBdX
 exampleResponseMessage = b"""HTTP/1.1 200 OK
 Date: Tue, 20 Apr 2021 02:07:56 GMT
 Content-Type: application/json
-Content-Digest: sha-512=:JlEy2bfUz7WrWIjc1qV6KVLpdr/7L5/L4h7Sxvh6sNHpDQWDCL+GauFQWcZBvVDhiyOnAQsxzZFYwi0wDH+1pw==:
 Content-Length: 23
 
 {"message": "good dog"}"""
@@ -525,8 +522,62 @@ def parse_components(msg):
             
         response['inputSignatures'] = siginputs
 
+    # process the body
+    body = p.recv_body()
+    if body:
+        response['body'] = body
+
     return response
     
+def add_content_digest(components, alg='sha-512'):
+    if 'body' in components:
+        if alg == 'sha-512':
+            h = SHA512.new(components['body'])
+        elif alg == 'sha-256':
+            h = SHA256.new(components['body'])
+        else:
+            # unknown alg, skip it
+            return components
+        dv = http_sfv.Item(h.digest())
+        cd = http_sfv.Dictionary()
+        cd[alg] = dv
+        
+        cid = http_sfv.Item('Content-Digest'.lower())
+        components['fields'].append(
+            {
+                'id': cid.value,
+                'cid': str(cid),
+                'val': str(cd)
+            }
+        )
+        
+        # key with algorithm
+        cid = http_sfv.Item('Content-Digest'.lower())
+        cid.params['key'] = alg
+        components['fields'].append(
+            {
+                'id': cid.value,
+                'cid': str(cid),
+                'key': alg,
+                'val': str(dv)
+            }
+        )
+        
+        # structured field strict serialization
+        cid = http_sfv.Item('Content-Digest'.lower())
+        cid.params['sf'] = True
+        components['fields'].append(
+            {
+                'id': cid.value,
+                'cid': str(cid),
+                'sf': True,
+                'val': str(cd)
+            }
+        )
+        
+        return components
+    else:
+        return components
 
 def generate_input(components, coveredComponents, params):
     sigparams = http_sfv.InnerList()
@@ -632,8 +683,34 @@ print('*' * 30)
 print()
 print(hardwrap(exampleRequestMessage.decode()))
 print()
+
+components = parse_components(exampleRequestMessage)
+components = add_content_digest(components)
+cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
+
+print()
+print(str(cd['val']))
+print()
+print(hardwrap(str(cd['val'])))
+print()
+print(hardwrap('Content-Digest: ' + str(cd['val'])))
+print()
+
+
 print(hardwrap(exampleResponseMessage.decode()))
 print()
+components = parse_components(exampleResponseMessage)
+components = add_content_digest(components)
+cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
+
+print()
+print(str(cd['val']))
+print()
+print(hardwrap(str(cd['val'])))
+print()
+print(hardwrap('Content-Digest: ' + str(cd['val'])))
+print()
+
 
 ## Base example pieces
 
@@ -643,6 +720,18 @@ print('*' * 30)
 
 
 components = parse_components(exampleRequestMessage)
+
+components = add_content_digest(components)
+cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
+
+print("Content Digest:")
+print()
+print(str(cd['val']))
+print()
+print(hardwrap(str(cd['val'])))
+print()
+print(hardwrap('Content-Digest: ' + str(cd['val'])))
+print()
 
 siginput = generate_input(
     components, 
@@ -715,6 +804,18 @@ print('*' * 30)
 
 # Message with existing signatures and added headers
 components = parse_components(exampleReverseProxyMessage)
+
+components = add_content_digest(components)
+cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
+
+print('Content Digest:')
+print()
+print(str(cd['val']))
+print()
+print(hardwrap(str(cd['val'])))
+print()
+print(hardwrap('Content-Digest: ' + str(cd['val'])))
+print()
 
 siginput = generate_input(
     components, 
@@ -931,6 +1032,18 @@ print('*' * 30)
 
 components = parse_components(exampleRequestMessage)
 
+components = add_content_digest(components)
+cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
+
+print('Content Digest:')
+print()
+print(str(cd['val']))
+print()
+print(hardwrap(str(cd['val'])))
+print()
+print(hardwrap('Content-Digest: ' + str(cd['val'])))
+print()
+
 siginput = generate_input(
     components, 
     ( # covered components list
@@ -995,6 +1108,18 @@ print('* Full Coverage')
 print('*' * 30)
 
 components = parse_components(exampleRequestMessage)
+
+components = add_content_digest(components)
+cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
+
+print('Content Digest:')
+print()
+print(str(cd['val']))
+print()
+print(hardwrap(str(cd['val'])))
+print()
+print(hardwrap('Content-Digest: ' + str(cd['val'])))
+print()
 
 siginput = generate_input(
     components, 
@@ -1065,6 +1190,18 @@ print('* ECC Response')
 print('*' * 30)
 
 components = parse_components(exampleResponseMessage)
+
+components = add_content_digest(components)
+cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
+
+print('Content Digest:')
+print()
+print(str(cd['val']))
+print()
+print(hardwrap(str(cd['val'])))
+print()
+print(hardwrap('Content-Digest: ' + str(cd['val'])))
+print()
 
 siginput = generate_input(
     components, 
@@ -1187,6 +1324,18 @@ print('*' * 30)
 reqComponents = parse_components(exampleReverseProxyMessage)
 components = parse_components(exampleRequestResponseMessage)
 
+components = add_content_digest(components)
+cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
+
+print('Content Digest:')
+print()
+print(str(cd['val']))
+print()
+print(hardwrap(str(cd['val'])))
+print()
+print(hardwrap('Content-Digest: ' + str(cd['val'])))
+print()
+
 # Manually add in the request-response component from the request components
 
 comp = next((x for x in reqComponents['fields'] if 'key' in x and x['id'] == 'signature' and x['key'] == 'sig1'), None)
@@ -1272,6 +1421,18 @@ print('*' * 30)
 
 
 components = parse_components(exampleReverseProxyMessage)
+
+components = add_content_digest(components)
+cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
+
+print('Content Digest:')
+print()
+print(str(cd['val']))
+print()
+print(hardwrap(str(cd['val'])))
+print()
+print(hardwrap('Content-Digest: ' + str(cd['val'])))
+print()
 
 siginput = generate_input(
     components, 
