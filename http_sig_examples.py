@@ -647,20 +647,8 @@ def generate_input(components, coveredComponents, params):
                 base += comp['val']
                 base += "\n"
 
-    if 'created' in params:
-        sigparams.params['created'] = params['created']
-    
-    if 'expires' in params:
-        sigparams.params['expires'] = params['expires']
-    
-    if 'keyid' in params:
-        sigparams.params['keyid'] = params['keyid']
-    
-    if 'nonce' in params:
-        sigparams.params['nonce'] = params['nonce']
-    
-    if 'alg' in params:
-        sigparams.params['alg'] = params['alg']
+    for pn in params:
+        sigparams.params[pn] = params[pn]
 
     sigparamstr = ''
     sigparamstr += str(http_sfv.Item("@signature-params")) # never any parameters
