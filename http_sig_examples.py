@@ -26,6 +26,8 @@ from Cryptodome.Util.asn1 import DerBitString
 from Cryptodome.Util.asn1 import DerSequence
 from nacl.signing import SigningKey
 from nacl.signing import VerifyKey
+from nacl.exceptions import BadSignatureError
+
 mgf512 = lambda x, y: MGF1(x, y, SHA512)
 
 from httpsig import *
@@ -197,6 +199,48 @@ Content-Type: application/json
 Content-Length: 62
 
 {"busy": true, "message": "Your call is very important to us"}
+"""
+
+exampleGetRequest1 = b"""GET /demo?name1=Value1&Name2=value2 HTTP/1.1
+Host: example.org
+Date: Fri, 15 Jul 2022 14:24:55 GMT
+Accept: application/json
+Accept: */*
+"""
+
+exampleGetRequest2 = b"""GET /demo?name1=Value1&Name2=value2&param=added HTTP/1.1
+Host: example.org
+Date: Fri, 15 Jul 2022 14:24:55 GMT
+Accept: application/json
+Accept: */*
+Accept-Language: en-US,en;q=0.5
+"""
+
+exampleGetRequest3 = b"""GET /demo?name1=Value1&Name2=value2 HTTP/1.1
+Host: example.org
+Referer: https://developer.example.org/demo
+Accept: application/json, */*
+"""
+
+exampleGetRequest4 = b"""GET /demo?name1=Value1&Name2=value2 HTTP/1.1
+Accept: application/json
+Accept: */*
+Date: Fri, 15 Jul 2022 14:24:55 GMT
+Host: example.org
+"""
+
+exampleGetRequest_bad1 = b"""POST /demo?name1=Value1&Name2=value2 HTTP/1.1
+Host: example.com
+Date: Fri, 15 Jul 2022 14:24:55 GMT
+Accept: application/json
+Accept: */*
+"""
+
+exampleGetRequest_bad2 = b"""GET /demo?name1=Value1&Name2=value2 HTTP/1.1
+Host: example.org
+Date: Fri, 15 Jul 2022 14:24:55 GMT
+Accept: */*
+Accept: application/json
 """
 
 print('*' * 30)
@@ -571,7 +615,8 @@ siginput = generate_input(
     components, 
     ( # covered components list
         { 'id': "@authority" },
-        { 'id': "content-digest" }
+        { 'id': "content-digest" },
+        { 'id': "@query-param", "name": "Pet"}
     ),
     {
         'created': 1618884473,
@@ -866,7 +911,9 @@ siginput = generate_input(
         { 'id': "@status" },
         { 'id': "content-length" },
         { 'id': "content-type" },
-        { 'id': "signature", 'key': "sig1", 'req': True }
+        { 'id': "signature", 'key': "sig1", 'req': True },
+        { 'id': "@authority", 'req': True },
+        { 'id': "@method", 'req': True }
     ),
     {
         'created': 1618884479,
@@ -1114,7 +1161,7 @@ try:
 except (ValueError, TypeError):
     print("Verified:")
     print('> NO!')
-    results['Ed25519'] = 'YES'
+    results['Ed25519'] = 'NO'
     print()
 
 print('*' * 30)
@@ -1198,6 +1245,273 @@ print(hardwrap(base))
 print()
 print(softwrap(base))
 print()
+
+
+print('*' * 30)
+
+
+## Transformed Messages
+print('Transformed Messages')
+print('*' * 30)
+
+print('Original message:')
+print()
+print(softwrap(exampleGetRequest1.decode()))
+print()
+
+components = parse_components(exampleGetRequest1)
+
+siginput = generate_input(
+    components, 
+    ( # covered components list
+        { 'id': "@method" },
+        { 'id': "@path" },
+        { 'id': "@authority" },
+        { 'id': "accept" }
+    ),
+    {
+        'created': 1618884473,
+        'keyid': 'test-key-ed25519'
+    }
+)
+
+base = siginput['signatureInput']
+sigparams = siginput['signatureParams']
+
+print("Base string:")
+print()
+print(base)
+print()
+print(hardwrap(base))
+print()
+print(softwrap(base))
+print()
+print(softwrap('Signature-Input: transform=' + str(sigparams)))
+print()
+
+# Unpack private key, format is not supported by Cryptodomex PEM parser
+der = DerOctetString()
+der.decode(PKCS8.unwrap(PEM.decode(ed25519TestKeyPrivate)[0])[1])
+key = SigningKey(der.payload)
+
+h = base.encode('utf-8')
+signed = http_sfv.Item(key.sign(h).signature)
+
+print("Signed:")
+print(signed)
+print()
+print(hardwrap(str(signed).strip(':'), 0))
+print()
+print(hardwrap('Signature: transform=' + str(signed)))
+print()
+
+# Unpack public key, format is not supported by Cryptodomex PEM parser
+
+# sequence of ID and BitString
+ds = DerSequence()
+ds.decode(PEM.decode(ed25519TestKeyPublic)[0])
+bs = DerBitString()
+bs.decode(ds[1])
+# the first byte of the bitstring is "0" for some reason??
+pubKey = VerifyKey(bs.payload[1:])
+
+try:
+    verified = pubKey.verify(h, signed.value)
+    print("Verified:")
+    print('> YES!')
+    results['transform1'] = 'YES'
+    print()
+except (ValueError, TypeError):
+    print("Verified:")
+    print('> NO!')
+    results['transform1'] = 'NO'
+    print()
+
+
+## now test other messages
+print('Alternate message 2:')
+print()
+print(softwrap(exampleGetRequest2.decode()))
+print()
+
+components = parse_components(exampleGetRequest2)
+
+siginput = generate_input(
+    components, 
+    ( # covered components list
+        { 'id': "@method" },
+        { 'id': "@path" },
+        { 'id': "@authority" },
+        { 'id': "accept" }
+    ),
+    {
+        'created': 1618884473,
+        'keyid': 'test-key-ed25519'
+    }
+)
+
+base = siginput['signatureInput']
+h = base.encode('utf-8')
+
+try:
+    verified = pubKey.verify(h, signed.value)
+    print("Verified:")
+    print('> YES!')
+    results['transform2'] = 'YES'
+    print()
+except (ValueError, TypeError):
+    print("Verified:")
+    print('> NO!')
+    results['transform2'] = 'NO'
+    print()
+
+print('Alternate message 3:')
+print()
+print(softwrap(exampleGetRequest3.decode()))
+print()
+
+components = parse_components(exampleGetRequest3)
+
+siginput = generate_input(
+    components, 
+    ( # covered components list
+        { 'id': "@method" },
+        { 'id': "@path" },
+        { 'id': "@authority" },
+        { 'id': "accept" }
+    ),
+    {
+        'created': 1618884473,
+        'keyid': 'test-key-ed25519'
+    }
+)
+
+base = siginput['signatureInput']
+h = base.encode('utf-8')
+
+try:
+    verified = pubKey.verify(h, signed.value)
+    print("Verified:")
+    print('> YES!')
+    results['transform3'] = 'YES'
+    print()
+except (ValueError, TypeError):
+    print("Verified:")
+    print('> NO!')
+    results['transform3'] = 'NO'
+    print()
+
+print('Alternate message 4:')
+print()
+print(softwrap(exampleGetRequest4.decode()))
+print()
+
+components = parse_components(exampleGetRequest4)
+
+siginput = generate_input(
+    components, 
+    ( # covered components list
+        { 'id': "@method" },
+        { 'id': "@path" },
+        { 'id': "@authority" },
+        { 'id': "accept" }
+    ),
+    {
+        'created': 1618884473,
+        'keyid': 'test-key-ed25519'
+    }
+)
+
+base = siginput['signatureInput']
+h = base.encode('utf-8')
+
+try:
+    verified = pubKey.verify(h, signed.value)
+    print("Verified:")
+    print('> YES!')
+    results['transform4'] = 'YES'
+    print()
+except (ValueError, TypeError):
+    print("Verified:")
+    print('> NO!')
+    results['transform4'] = 'NO'
+    print()
+
+print('Alternate message Bad 1:')
+print()
+print(softwrap(exampleGetRequest_bad1.decode()))
+print()
+
+components = parse_components(exampleGetRequest_bad1)
+
+siginput = generate_input(
+    components, 
+    ( # covered components list
+        { 'id': "@method" },
+        { 'id': "@path" },
+        { 'id': "@authority" },
+        { 'id': "accept" }
+    ),
+    {
+        'created': 1618884473,
+        'keyid': 'test-key-ed25519'
+    }
+)
+
+base = siginput['signatureInput']
+h = base.encode('utf-8')
+
+try:
+    verified = pubKey.verify(h, signed.value)
+    print("Failed:")
+    print('> NO!')
+    results['transform bad1'] = 'NO' # this is supposed to fail
+    print()
+except (ValueError, TypeError, BadSignatureError):
+    print("Failed:")
+    print('> YES!')
+    results['transform bad1'] = 'YES' # this is supposed to fail
+    print()
+
+print('Alternate message Bad 2:')
+print()
+print(softwrap(exampleGetRequest_bad2.decode()))
+print()
+
+components = parse_components(exampleGetRequest_bad2)
+
+siginput = generate_input(
+    components, 
+    ( # covered components list
+        { 'id': "@method" },
+        { 'id': "@path" },
+        { 'id': "@authority" },
+        { 'id': "accept" }
+    ),
+    {
+        'created': 1618884473,
+        'keyid': 'test-key-ed25519'
+    }
+)
+
+base = siginput['signatureInput']
+h = base.encode('utf-8')
+
+try:
+    verified = pubKey.verify(h, signed.value)
+    print("Failed:")
+    print('> NO!')
+    results['transform bad2'] = 'NO' # this is supposed to fail
+    print()
+except (ValueError, TypeError, BadSignatureError):
+    print("Failed:")
+    print('> YES!')
+    results['transform bad2'] = 'YES' # this is supposed to fail
+    print()
+
+
+print('*' * 30)
+
 
 
 print('*' * 30)
