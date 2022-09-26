@@ -300,7 +300,7 @@ print()
 print(hardwrap('Content-Digest: ' + str(cd['val'])))
 print()
 
-siginput = generate_input(
+siginput = generate_base(
     components, 
     ( # covered components list
         { 'id': "@method" }, 
@@ -384,7 +384,7 @@ print()
 print(hardwrap('Content-Digest: ' + str(cd['val'])))
 print()
 
-siginput = generate_input(
+siginput = generate_base(
     components, 
     ( # covered components list
         { 'id': "signature", 'key': 'sig1' }, 
@@ -462,7 +462,7 @@ print('*' * 30)
 # message with client cert header
 components = parse_components(exampleClientCertMessage)
 
-siginput = generate_input(
+siginput = generate_base(
     components, 
     ( # covered components list
         { 'id': "@path" },
@@ -535,7 +535,7 @@ print('*' * 30)
 
 components = parse_components(exampleRequestMessage)
 
-siginput = generate_input(
+siginput = generate_base(
     components, 
     ( # covered components list
     ),
@@ -611,7 +611,7 @@ print()
 print(hardwrap('Content-Digest: ' + str(cd['val'])))
 print()
 
-siginput = generate_input(
+siginput = generate_base(
     components, 
     ( # covered components list
         { 'id': "@authority" },
@@ -620,7 +620,8 @@ siginput = generate_input(
     ),
     {
         'created': 1618884473,
-        'keyid': 'test-key-rsa-pss'
+        'keyid': 'test-key-rsa-pss',
+        'tag': 'header-example'
     }
 )
 
@@ -689,7 +690,7 @@ print()
 print(hardwrap('Content-Digest: ' + str(cd['val'])))
 print()
 
-siginput = generate_input(
+siginput = generate_base(
     components, 
     ( # covered components list
         { 'id': "date" },
@@ -771,7 +772,7 @@ print()
 print(hardwrap('Content-Digest: ' + str(cd['val'])))
 print()
 
-siginput = generate_input(
+siginput = generate_base(
     components, 
     ( # covered components list
         { 'id': "@status" },
@@ -838,7 +839,7 @@ print('*' * 30)
 
 components = parse_components(exampleRequestMessage)
 
-siginput = generate_input(
+siginput = generate_base(
     components, 
     ( # covered components list
         { 'id': "date" },
@@ -905,7 +906,7 @@ print()
 print(hardwrap('Content-Digest: ' + str(cd['val'])))
 print()
 
-siginput = generate_input(
+siginput = generate_base(
     components, 
     ( # covered components list
         { 'id': "@status" },
@@ -996,7 +997,7 @@ print()
 print(hardwrap('Content-Digest: ' + str(cd['val'])))
 print()
 
-siginput = generate_input(
+siginput = generate_base(
     components, 
     ( # covered components list
         { 'id': "@method" },
@@ -1096,7 +1097,7 @@ print('*' * 30)
 
 components = parse_components(exampleRequestMessage)
 
-siginput = generate_input(
+siginput = generate_base(
     components, 
     ( # covered components list
         { 'id': "date" },
@@ -1216,7 +1217,7 @@ Example-Dict:  a=1,    b=2;x=1;y=2,   c=(a   b   c)
 
 components = parse_components(msg)
 
-siginput = generate_input(
+siginput = generate_base(
     components, 
     ( # covered components list
         { 'id': "host" },
@@ -1261,7 +1262,7 @@ print()
 
 components = parse_components(exampleGetRequest1)
 
-siginput = generate_input(
+siginput = generate_base(
     components, 
     ( # covered components list
         { 'id': "@method" },
@@ -1336,7 +1337,7 @@ print()
 
 components = parse_components(exampleGetRequest2)
 
-siginput = generate_input(
+siginput = generate_base(
     components, 
     ( # covered components list
         { 'id': "@method" },
@@ -1372,7 +1373,7 @@ print()
 
 components = parse_components(exampleGetRequest3)
 
-siginput = generate_input(
+siginput = generate_base(
     components, 
     ( # covered components list
         { 'id': "@method" },
@@ -1408,7 +1409,7 @@ print()
 
 components = parse_components(exampleGetRequest4)
 
-siginput = generate_input(
+siginput = generate_base(
     components, 
     ( # covered components list
         { 'id': "@method" },
@@ -1444,7 +1445,7 @@ print()
 
 components = parse_components(exampleGetRequest_bad1)
 
-siginput = generate_input(
+siginput = generate_base(
     components, 
     ( # covered components list
         { 'id': "@method" },
@@ -1480,7 +1481,7 @@ print()
 
 components = parse_components(exampleGetRequest_bad2)
 
-siginput = generate_input(
+siginput = generate_base(
     components, 
     ( # covered components list
         { 'id': "@method" },
@@ -1511,6 +1512,8 @@ except (ValueError, TypeError, BadSignatureError):
 
 
 print('*' * 30)
+
+
 
 
 
