@@ -5,6 +5,7 @@ from Cryptodome.Signature import pss
 from Cryptodome.Signature import pkcs1_15
 from Cryptodome.Hash import SHA512
 from Cryptodome.Hash import SHA256
+from Cryptodome.Hash import SHA3_512
 from Cryptodome.PublicKey import RSA
 from Cryptodome import Random
 from Cryptodome.IO import PEM
@@ -150,7 +151,7 @@ print()
 
 components = parse_components(msg.encode('utf-8'))
 
-siginput = generate_input(
+siginput = generate_base(
     components, 
     ( # covered components list
         { 'id': "@method" }, 
@@ -161,7 +162,9 @@ siginput = generate_input(
     ),
     {
         'created': 1618884473,
-        'keyid': rsajwk['kid']
+        'keyid': rsajwk['kid'],
+        'nonce': 'NAOEJF12ER2',
+        'tag': 'gnap'
     }
 )
 
@@ -224,7 +227,7 @@ print()
 
 components = parse_components(msg.encode('utf-8'))
 
-siginput = generate_input(
+siginput = generate_base(
     components, 
     ( # covered components list
         { 'id': "@method" }, 
@@ -233,7 +236,9 @@ siginput = generate_input(
     ),
     {
         'created': 1618884473,
-        'keyid': rsajwk['kid']
+        'keyid': rsajwk['kid'],
+        'nonce': 'NAOEJF12ER2',
+        'tag': 'gnap'
     }
 )
 
@@ -281,6 +286,36 @@ except (ValueError, TypeError):
     print()
 
 print('*' * 30)
+
+
+print('*' * 30)
+
+hashbase = b"""VJLO6A4CATR0KRO
+MBDOFXG4Y5CVJCX821LH
+4IFWWIKYB2PQ6U56NL1
+https://server.example.com/tx"""
+
+h2 = SHA256.new(hashbase).digest()
+h3 = SHA3_512.new(hashbase).digest()
+
+print("Base:")
+print()
+print(hashbase.decode())
+print()
+
+print("SHA256:")
+print()
+print(base64.urlsafe_b64encode(h2).decode())
+print()
+print(hardwrap(base64.urlsafe_b64encode(h2).decode(), 0))
+print()
+
+print("SHA3 512:")
+print()
+print(base64.urlsafe_b64encode(h3).decode())
+print()
+print(hardwrap(base64.urlsafe_b64encode(h3).decode(), 0))
+print()
 
 sys.exit(1)
 

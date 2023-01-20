@@ -163,15 +163,23 @@ Content-Length: 18
 
 {"hello": "world"}"""
 
-exampleReverseProxyMessage = b"""
+exampleReverseProxyClientMessage = b"""
 POST /foo?param=Value&Pet=dog HTTP/1.1
 Host: example.com
 Date: Tue, 20 Apr 2021 02:07:55 GMT
 Content-Type: application/json
 Content-Length: 18
+
+{"hello": "world"}
+"""
+
+exampleReverseProxyMessage = b"""
+POST /foo?param=Value&Pet=dog HTTP/1.1
+Host: origin.host.internal.example
+Date: Tue, 20 Apr 2021 02:07:56 GMT
+Content-Type: application/json
+Content-Length: 18
 Forwarded: for=192.0.2.123
-Signature-Input: sig1=("@method" "@authority" "@path" "content-digest" "content-length" "content-type");created=1618884475;keyid="test-key-rsa-pss"
-Signature:  sig1=:LAH8BjcfcOcLojiuOBFWn0P5keD3xAOuJRGziCLuD8r5MW9S0RoXXLzLSRfGY/3SF8kVIkHjE13SEFdTo4Af/fJ/Pu9wheqoLVdwXyY/UkBIS1M8Brc8IODsn5DFIrG0IrburbLi0uCc+E2ZIIb6HbUJ+o+jP58JelMTe0QE3IpWINTEzpxjqDf5/Df+InHCAkQCTuKsamjWXUpyOT1Wkxi7YPVNOjW4MfNuTZ9HdbD2Tr65+BXeTG9ZS/9SWuXAc+BZ8WyPz0QRz//ec3uWXd7bYYODSjRAxHqX+S1ag3LZElYyUKaAIjZ8MGOt4gXEwCSLDv/zqxZeWLj/PDkn6w==:
 
 {"hello": "world"}
 """
@@ -242,6 +250,22 @@ Date: Fri, 15 Jul 2022 14:24:55 GMT
 Accept: */*
 Accept: application/json
 """
+
+exampleTrailer = b"""HTTP/1.1 200 OK
+Content-Type: text/plain
+Transfer-Encoding: chunked
+Trailer: Expires
+
+4
+HTTP
+7
+Message
+10
+Signatures
+0
+Expires: Wed, 9 Nov 2022 07:28:00 GMT
+"""
+
 
 print('*' * 30)
 print('* Example Messages')
@@ -369,9 +393,10 @@ print('*' * 30)
 print('* Reverse Proxy Signature ')
 print('*' * 30)
 
-# Message with existing signatures and added headers
-components = parse_components(exampleReverseProxyMessage)
+# Plain message
+components = parse_components(exampleReverseProxyClientMessage)
 
+# Add content digest
 components = add_content_digest(components)
 cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
 
@@ -384,10 +409,129 @@ print()
 print(hardwrap('Content-Digest: ' + str(cd['val'])))
 print()
 
+# Add Signature
+
+siginput = generate_base(
+    components, 
+    ( # covered components list
+        { 'id': "@method" },
+        { 'id': '@authority' },
+        { 'id': "@path" }, 
+        { 'id': "content-digest" },
+        { 'id': "content-type" },
+        { 'id': "content-length" }
+    ),
+    {
+        'created': 1618884475,
+        'keyid': 'test-key-ecc-p256'
+    }
+)
+
+base = siginput['signatureInput']
+sigparams = siginput['signatureParams']
+
+print("Client Base string:")
+print()
+print(base)
+print()
+print(hardwrap(base))
+print()
+print(softwrap(base))
+print()
+print(softwrap(exampleReverseProxyClientMessage.decode()))
+print()
+print(hardwrap(exampleReverseProxyClientMessage.decode()))
+print()
+print(softwrap('Signature-Input: sig1=' + str(sigparams)))
+print()
+
+key = ECC.import_key(eccTestKeyPrivate)
+
+h = SHA256.new(base.encode('utf-8'))
+signer = DSS.new(key, 'fips-186-3')
+
+signed = http_sfv.Item(signer.sign(h))
+
+print("Client Signed:")
+print()
+print(signed)
+print()
+print(hardwrap(str(signed).strip(':'), 0))
+print()
+print(hardwrap('Signature: sig1=' + str(signed)))
+print()
+
+
+pubKey = ECC.import_key(eccTestKeyPublic)
+verifier = DSS.new(pubKey, 'fips-186-3')
+
+try:
+    verified = verifier.verify(h, signed.value)
+    print("Verified:")
+    print('> YES!')
+    results['Client Proxy'] = 'YES'
+    print()
+except (ValueError, TypeError):
+    print("Verified:")
+    print('> NO!')
+    results['Client Proxy'] = 'NO'
+    print()
+
+
+components = parse_components(exampleReverseProxyMessage)
+
+# Add client signature
+sigfield = http_sfv.Dictionary()
+sigfield['sig1'] = signed
+
+cid = http_sfv.Item('Signature'.lower())
+components['fields'].append(
+    {
+        'id': cid.value,
+        'cid': str(cid),
+        'val': str(sigfield)
+    }
+)
+cid = http_sfv.Item('Signature'.lower())
+cid.params['key'] = 'sig1'
+components['fields'].append(
+    {
+        'id': cid.value,
+        'cid': str(cid),
+        'key': 'sig1',
+        'val': str(signed)
+    }
+)
+
+siginputfield = http_sfv.Dictionary()
+sigin = http_sfv.InnerList()
+sigin.parse(sigparams.encode('utf-8')) # we have to re-parse because we're handed the string not the Item
+siginputfield['sig1'] = sigin
+
+cid = http_sfv.Item('Signature-Input'.lower())
+components['fields'].append(
+    {
+        'id': cid.value,
+        'cid': str(cid),
+        'val': str(siginputfield)
+    }
+)
+cid = http_sfv.Item('Signature-Input'.lower())
+cid.params['key'] = 'sig1'
+components['fields'].append(
+    {
+        'id': cid.value,
+        'cid': str(cid),
+        'key': 'sig1',
+        'val': str(sigin)
+    }
+)
+
 siginput = generate_base(
     components, 
     ( # covered components list
         { 'id': "signature", 'key': 'sig1' }, 
+        { 'id': "@authority" },
         { 'id': "forwarded" }
     ),
     {
@@ -401,7 +545,7 @@ siginput = generate_base(
 base = siginput['signatureInput']
 sigparams = siginput['signatureParams']
 
-print("Base string:")
+print("Proxy Base string:")
 print()
 print(base)
 print()
@@ -428,7 +572,7 @@ signer = pkcs1_15.new(key)
 
 signed = http_sfv.Item(signer.sign(h))
 
-print("Signed:")
+print("Proxy Signed:")
 print()
 print(signed)
 print()
@@ -454,6 +598,8 @@ except (ValueError, TypeError):
     print()
 
 print('*' * 30)
+
+sys.exit(1)
 
 ## TLS reverse proxy signature
 print('* TLS Reverse Proxy Signature ')
