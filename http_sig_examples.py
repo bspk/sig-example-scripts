@@ -27,6 +27,7 @@ from Cryptodome.Util.asn1 import DerSequence
 from nacl.signing import SigningKey
 from nacl.signing import VerifyKey
 from nacl.exceptions import BadSignatureError
+from termcolor import colored
 
 mgf512 = lambda x, y: MGF1(x, y, SHA512)
 
@@ -267,9 +268,9 @@ Expires: Wed, 9 Nov 2022 07:28:00 GMT
 """
 
 
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 print('* Example Messages')
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 print()
 print(hardwrap(exampleRequestMessage.decode()))
@@ -305,9 +306,9 @@ print()
 
 ## Base example pieces
 
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 print('* Covered Content RSAPSS Test')
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 
 components = parse_components(exampleRequestMessage)
@@ -387,11 +388,11 @@ except (ValueError, TypeError):
     results['Covered Content RSAPSS Test'] = 'NO'
     print()
 
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 ## reverse proxy signature
 print('* Reverse Proxy Signature ')
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 # Plain message
 components = parse_components(exampleReverseProxyClientMessage)
@@ -531,7 +532,10 @@ siginput = generate_base(
     components, 
     ( # covered components list
         { 'id': "signature", 'key': 'sig1' }, 
+        { 'id': "signature-input", 'key': 'sig1' }, 
         { 'id': "@authority" },
+        { 'id': "@method" },
+        { 'id': "@path" },
         { 'id': "forwarded" }
     ),
     {
@@ -597,13 +601,11 @@ except (ValueError, TypeError):
     results['Reverse Proxy'] = 'NO'
     print()
 
-print('*' * 30)
-
-sys.exit(1)
+print(colored('*' * 30, 'blue'))
 
 ## TLS reverse proxy signature
 print('* TLS Reverse Proxy Signature ')
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 # message with client cert header
 components = parse_components(exampleClientCertMessage)
@@ -672,11 +674,11 @@ except (ValueError, TypeError):
     results['TTRP'] = 'NO'
     print()
 
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 ## minimal signature
 print('* Minimal Coverage')
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 
 components = parse_components(exampleRequestMessage)
@@ -737,11 +739,11 @@ except (ValueError, TypeError):
     results['TLSMinimal Coverage'] = 'NO'
     print()
 
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 ## header coverage
 print('* Header Coverage')
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 components = parse_components(exampleRequestMessage)
 
@@ -816,11 +818,11 @@ except (ValueError, TypeError):
     results['Header Coverage'] = 'NO'
     print()
 
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 ## full coverage
 print('* Full Coverage')
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 components = parse_components(exampleRequestMessage)
 
@@ -898,11 +900,11 @@ except (ValueError, TypeError):
     results['Full Coverage'] = 'NO'
     print()
 
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 ## ECC
 print('* ECC Response')
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 components = parse_components(exampleResponseMessage)
 
@@ -977,11 +979,11 @@ except (ValueError, TypeError):
     results['ECC Response'] = 'NO'
     print()
 
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 ## HMAC coverage
 print('* HMAC Coverage')
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 components = parse_components(exampleRequestMessage)
 
@@ -1030,14 +1032,134 @@ print()
 
 results['HMAC'] = 'LOL' # this is silly but ...
 
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 ## Request-Response
 print('* Request-Response')
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 reqComponents = parse_components(exampleReverseProxyMessage)
 reqComponents = add_content_digest(reqComponents)
+
+# Add Signature
+
+siginput = generate_base(
+    reqComponents, 
+    ( # covered components list
+        { 'id': "@method" },
+        { 'id': '@authority' },
+        { 'id': "@path" }, 
+        { 'id': "content-digest" },
+        { 'id': "content-type" },
+        { 'id': "content-length" }
+    ),
+    {
+        'created': 1618884475,
+        'keyid': 'test-key-rsa-pss'
+    }
+)
+
+base = siginput['signatureInput']
+sigparams = siginput['signatureParams']
+
+print("Client Base string:")
+print()
+print(base)
+print()
+print(hardwrap(base))
+print()
+print(softwrap(base))
+print()
+print(softwrap(exampleReverseProxyClientMessage.decode()))
+print()
+print(hardwrap(exampleReverseProxyClientMessage.decode()))
+print()
+print(softwrap('Signature-Input: sig1=' + str(sigparams)))
+print()
+
+key = RSA.import_key(PKCS8.unwrap(PEM.decode(rsaTestKeyPssPrivate)[0])[1])
+
+h = SHA512.new(base.encode('utf-8'))
+signer = pss.new(key, mask_func=mgf512, salt_bytes=64)
+
+signed = http_sfv.Item(signer.sign(h))
+
+print("Client Signed:")
+print()
+print(signed)
+print()
+print(hardwrap(str(signed).strip(':'), 0))
+print()
+print(hardwrap('Signature: sig1=' + str(signed)))
+print()
+
+
+pubKey = RSA.import_key(rsaTestKeyPssPublic)
+verifier = pss.new(pubKey, mask_func=mgf512, salt_bytes=64)
+
+try:
+    verified = verifier.verify(h, signed.value)
+    print("Verified:")
+    print('> YES!')
+    results['Client Req'] = 'YES'
+    print()
+except (ValueError, TypeError):
+    print("Verified:")
+    print('> NO!')
+    results['Client Req'] = 'NO'
+    print()
+
+# Add client signature
+sigfield = http_sfv.Dictionary()
+sigfield['sig1'] = signed
+
+cid = http_sfv.Item('Signature'.lower())
+reqComponents['fields'].append(
+    {
+        'id': cid.value,
+        'cid': str(cid),
+        'val': str(sigfield)
+    }
+)
+cid = http_sfv.Item('Signature'.lower())
+cid.params['key'] = 'sig1'
+reqComponents['fields'].append(
+    {
+        'id': cid.value,
+        'cid': str(cid),
+        'key': 'sig1',
+        'val': str(signed)
+    }
+)
+
+siginputfield = http_sfv.Dictionary()
+sigin = http_sfv.InnerList()
+sigin.parse(sigparams.encode('utf-8')) # we have to re-parse because we're handed the string not the Item
+siginputfield['sig1'] = sigin
+
+cid = http_sfv.Item('Signature-Input'.lower())
+reqComponents['fields'].append(
+    {
+        'id': cid.value,
+        'cid': str(cid),
+        'val': str(siginputfield)
+    }
+)
+cid = http_sfv.Item('Signature-Input'.lower())
+cid.params['key'] = 'sig1'
+reqComponents['fields'].append(
+    {
+        'id': cid.value,
+        'cid': str(cid),
+        'key': 'sig1',
+        'val': str(sigin)
+    }
+)
+
+
+
+
+
 components = parse_components(exampleRequestResponseMessage)
 
 components = add_content_digest(components)
@@ -1059,6 +1181,7 @@ siginput = generate_base(
         { 'id': "content-length" },
         { 'id': "content-type" },
         { 'id': "signature", 'key': "sig1", 'req': True },
+        { 'id': "signature-input", 'key': "sig1", 'req': True },
         { 'id': "@authority", 'req': True },
         { 'id': "@method", 'req': True }
     ),
@@ -1121,12 +1244,12 @@ except (ValueError, TypeError):
     results['Request Response: Related-Response'] = 'NO'
     print()
 
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 # Static signature test
 
 print('HTTPSig Static Test 1')
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 
 components = parse_components(exampleReverseProxyMessage)
@@ -1198,12 +1321,12 @@ except (ValueError, TypeError):
     results['Static 1'] = 'NO'
     print()
 
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 # Static signature test
 
 print('HTTPSig Static Test 3')
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 
 base = '''"@method": POST
@@ -1235,11 +1358,11 @@ except (ValueError, TypeError):
     results['Static 3'] = 'NO'
     print()
 
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 ## ED 25519
 print('ed25519 signature')
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 components = parse_components(exampleRequestMessage)
 
@@ -1311,11 +1434,11 @@ except (ValueError, TypeError):
     results['Ed25519'] = 'NO'
     print()
 
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 # Static HTTP test (ECC)
 print('HTTPSig Static Test 2')
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 
 base = '''"@authority": example.com
@@ -1344,11 +1467,11 @@ except (ValueError, TypeError):
     results['Static 2'] = 'NO'
     print()
 
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 # Static Header formatting
 print('Static header formatting')
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 msg = b"""GET / HTTP/1.1
 Host: www.example.com
@@ -1394,12 +1517,12 @@ print(softwrap(base))
 print()
 
 
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 
 ## Transformed Messages
 print('Transformed Messages')
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 print('Original message:')
 print()
@@ -1657,13 +1780,13 @@ except (ValueError, TypeError, BadSignatureError):
     print()
 
 
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 
 
 
 
-print('*' * 30)
+print(colored('*' * 30, 'blue'))
 
 
 print()
