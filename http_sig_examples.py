@@ -28,11 +28,40 @@ from nacl.signing import SigningKey
 from nacl.signing import VerifyKey
 from nacl.exceptions import BadSignatureError
 from termcolor import colored
+import argparse
 
 mgf512 = lambda x, y: MGF1(x, y, SHA512)
 
 from httpsig import *
 from crunchwrap import softwrap, hardwrap
+
+
+parser = argparse.ArgumentParser(description='Import comments.')
+
+parser.add_argument('target', help='example sections to run', nargs='*')
+
+args = parser.parse_args()
+
+
+targets = [
+    'example',
+    'rsapss',
+    'clientproxy',
+    'revproxy',
+    'ttrp',
+    'min',
+    'header',
+    'full',
+    'eccres',
+    'hmac',
+    'reqres',
+    'ed25519',
+    'transform',
+    'static'
+]
+
+if not args.target:
+    args.target = targets
 
 results = dict()
 
@@ -267,1526 +296,1543 @@ Signatures
 Expires: Wed, 9 Nov 2022 07:28:00 GMT
 """
 
+if 'example' in args.target:
+    print(colored('*' * 30, 'blue'))
+    print(colored('*', 'blue') + ' Example Messages')
+    print(colored('*' * 30, 'blue'))
+
+    print()
+    print(hardwrap(exampleRequestMessage.decode()))
+    print()
+
+    components = parse_components(exampleRequestMessage)
+    components = add_content_digest(components)
+    cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
+
+    print()
+    print(str(cd['val']))
+    print()
+    print(hardwrap(str(cd['val'])))
+    print()
+    print(hardwrap('Content-Digest: ' + str(cd['val'])))
+    print()
+
+
+    print(hardwrap(exampleResponseMessage.decode()))
+    print()
+    components = parse_components(exampleResponseMessage)
+    components = add_content_digest(components)
+    cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
+
+    print()
+    print(str(cd['val']))
+    print()
+    print(hardwrap(str(cd['val'])))
+    print()
+    print(hardwrap('Content-Digest: ' + str(cd['val'])))
+    print()
+
+
+
+if 'rsapss' in args.target:
+    ## Base example pieces
+
+    print(colored('*' * 30, 'blue'))
+    print(colored('*', 'blue') + ' Covered Content RSAPSS Test')
+    print(colored('*' * 30, 'blue'))
+
+
+    components = parse_components(exampleRequestMessage)
+
+    components = add_content_digest(components)
+    cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
+
+    print("Content Digest:")
+    print()
+    print(str(cd['val']))
+    print()
+    print(hardwrap(str(cd['val'])))
+    print()
+    print(hardwrap('Content-Digest: ' + str(cd['val'])))
+    print()
+
+    siginput = generate_base(
+        components, 
+        ( # covered components list
+            { 'id': "@method" }, 
+            { 'id': "@authority" },
+            { 'id': "@path" },
+            { 'id': "content-digest" },
+            { 'id': "content-length" },
+            { 'id': "content-type" }
+        ),
+        {
+            'created': 1618884473,
+            'keyid': 'test-key-rsa-pss'
+        }
+    )
+
+    base = siginput['signatureInput']
+    sigparams = siginput['signatureParams']
+
+    print("Base string:")
+    print()
+    print(base)
+    print()
+    print(hardwrap(base))
+    print()
+    print(softwrap(base))
+    print()
+    print(softwrap('Signature-Input: sig1=' + str(sigparams)))
+    print()
+
+    key = RSA.import_key(PKCS8.unwrap(PEM.decode(rsaTestKeyPssPrivate)[0])[1])
+
+    h = SHA512.new(base.encode('utf-8'))
+    signer = pss.new(key, mask_func=mgf512, salt_bytes=64)
+
+    signed = http_sfv.Item(signer.sign(h))
+
+    print("Signed:")
+    print()
+    print(signed)
+    print()
+    print(hardwrap(str(signed).strip(':'), 0))
+    print()
+    print(hardwrap('Signature: sig1=' + str(signed)))
+    print()
+
+    # publicKey = M2Crypto.RSA.load_key_string(rsaTestKeyPssPublic)
+
+    pubKey = RSA.import_key(rsaTestKeyPssPublic)
+    verifier = pss.new(pubKey, mask_func=mgf512, salt_bytes=64)
+
+    try:
+        verified = verifier.verify(h, signed.value)
+        print("Verified:")
+        print('> YES!')
+        results['Covered Content RSAPSS Test'] = 'YES'
+        print()
+    except (ValueError, TypeError):
+        print("Verified:")
+        print('> NO!')
+        results['Covered Content RSAPSS Test'] = 'NO'
+        print()
+
+
+if 'revproxy' in args.target:
+    print(colored('*' * 30, 'blue'))
+
+    ## reverse proxy signature
+    print(colored('*', 'blue') + ' Reverse Proxy Signature ')
+    print(colored('*' * 30, 'blue'))
+
+    # Plain message
+    components = parse_components(exampleReverseProxyClientMessage)
+
+    # Add content digest
+    components = add_content_digest(components)
+    cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
+
+    print('Content Digest:')
+    print()
+    print(str(cd['val']))
+    print()
+    print(hardwrap(str(cd['val'])))
+    print()
+    print(hardwrap('Content-Digest: ' + str(cd['val'])))
+    print()
+
+    # Add Signature
+
+    siginput = generate_base(
+        components, 
+        ( # covered components list
+            { 'id': "@method" },
+            { 'id': '@authority' },
+            { 'id': "@path" }, 
+            { 'id': "content-digest" },
+            { 'id': "content-type" },
+            { 'id': "content-length" }
+        ),
+        {
+            'created': 1618884475,
+            'keyid': 'test-key-ecc-p256'
+        }
+    )
+
+    base = siginput['signatureInput']
+    sigparams = siginput['signatureParams']
+
+    print("Client Base string:")
+    print()
+    print(base)
+    print()
+    print(hardwrap(base))
+    print()
+    print(softwrap(base))
+    print()
+    print(softwrap(exampleReverseProxyClientMessage.decode()))
+    print()
+    print(hardwrap(exampleReverseProxyClientMessage.decode()))
+    print()
+    print(softwrap('Signature-Input: sig1=' + str(sigparams)))
+    print()
+
+    key = ECC.import_key(eccTestKeyPrivate)
+
+    h = SHA256.new(base.encode('utf-8'))
+    signer = DSS.new(key, 'fips-186-3')
+
+    signed = http_sfv.Item(signer.sign(h))
+
+    print("Client Signed:")
+    print()
+    print(signed)
+    print()
+    print(hardwrap(str(signed).strip(':'), 0))
+    print()
+    print(hardwrap('Signature: sig1=' + str(signed)))
+    print()
+
+
+    pubKey = ECC.import_key(eccTestKeyPublic)
+    verifier = DSS.new(pubKey, 'fips-186-3')
+
+    try:
+        verified = verifier.verify(h, signed.value)
+        print("Verified:")
+        print('> YES!')
+        results['Client Proxy'] = 'YES'
+        print()
+    except (ValueError, TypeError):
+        print("Verified:")
+        print('> NO!')
+        results['Client Proxy'] = 'NO'
+        print()
+
+
+    components = parse_components(exampleReverseProxyMessage)
+
+    # Add client signature
+    sigfield = http_sfv.Dictionary()
+    sigfield['sig1'] = signed
+
+    cid = http_sfv.Item('Signature'.lower())
+    components['fields'].append(
+        {
+            'id': cid.value,
+            'cid': str(cid),
+            'val': str(sigfield)
+        }
+    )
+    cid = http_sfv.Item('Signature'.lower())
+    cid.params['key'] = 'sig1'
+    components['fields'].append(
+        {
+            'id': cid.value,
+            'cid': str(cid),
+            'key': 'sig1',
+            'val': str(signed)
+        }
+    )
+
+    siginputfield = http_sfv.Dictionary()
+    sigin = http_sfv.InnerList()
+    sigin.parse(sigparams.encode('utf-8')) # we have to re-parse because we're handed the string not the Item
+    siginputfield['sig1'] = sigin
+
+    cid = http_sfv.Item('Signature-Input'.lower())
+    components['fields'].append(
+        {
+            'id': cid.value,
+            'cid': str(cid),
+            'val': str(siginputfield)
+        }
+    )
+    cid = http_sfv.Item('Signature-Input'.lower())
+    cid.params['key'] = 'sig1'
+    components['fields'].append(
+        {
+            'id': cid.value,
+            'cid': str(cid),
+            'key': 'sig1',
+            'val': str(sigin)
+        }
+    )
+
+    siginput = generate_base(
+        components, 
+        ( # covered components list
+            { 'id': "signature", 'key': 'sig1' }, 
+            { 'id': "signature-input", 'key': 'sig1' }, 
+            { 'id': "@authority" },
+            { 'id': "@method" },
+            { 'id': "@path" },
+            { 'id': "forwarded" }
+        ),
+        {
+            'created': 1618884480,
+            'keyid': 'test-key-rsa',
+            'alg': 'rsa-v1_5-sha256',
+            'expires': 1618884540
+        }
+    )
+
+    base = siginput['signatureInput']
+    sigparams = siginput['signatureParams']
+
+    print("Proxy Base string:")
+    print()
+    print(base)
+    print()
+    print(hardwrap(base))
+    print()
+    print(softwrap(base))
+    print()
+    print(softwrap(exampleReverseProxyMessage.decode()))
+    print()
+    print(softwrap(exampleReverseProxyMessage.decode(), 4))
+    print()
+    print(hardwrap(exampleReverseProxyMessage.decode()))
+    print()
+    print(hardwrap(exampleReverseProxyMessage.decode(), 4))
+    print()
+    print(', \\')
+    print(softwrap('  proxy_sig=' + str(sigparams), 4))
+    print()
+
+    key = RSA.import_key(rsaTestKeyPrivate)
+
+    h = SHA256.new(base.encode('utf-8'))
+    signer = pkcs1_15.new(key)
+
+    signed = http_sfv.Item(signer.sign(h))
+
+    print("Proxy Signed:")
+    print()
+    print(signed)
+    print()
+    print(hardwrap(str(signed).strip(':'), 0))
+    print()
+    print(', \\')
+    print(hardwrap('  proxy_sig=' + str(signed), 4))
+    print()
+
+    pubKey = RSA.import_key(rsaTestKeyPublic)
+    verifier = pkcs1_15.new(pubKey)
+
+    try:
+        verified = verifier.verify(h, signed.value)
+        print("Verified:")
+        print('> YES!')
+        results['Reverse Proxy'] = 'YES'
+        print()
+    except (ValueError, TypeError):
+        print("Verified:")
+        print('> NO!')
+        results['Reverse Proxy'] = 'NO'
+        print()
+
+
+if 'ttrp' in args.target:
+    print(colored('*' * 30, 'blue'))
+
+    ## TLS reverse proxy signature
+    print(colored('*', 'blue') + ' TLS Reverse Proxy Signature ')
+    print(colored('*' * 30, 'blue'))
+
+    # message with client cert header
+    components = parse_components(exampleClientCertMessage)
+
+    siginput = generate_base(
+        components, 
+        ( # covered components list
+            { 'id': "@path" },
+            { 'id': '@query' },
+            { 'id': "@method" }, 
+            { 'id': "@authority" },
+            { 'id': "client-cert" }
+        ),
+        {
+            'created': 1618884473,
+            'keyid': 'test-key-ecc-p256'
+        }
+    )
+
+    base = siginput['signatureInput']
+    sigparams = siginput['signatureParams']
+
+    print("Base string:")
+    print()
+    print(base)
+    print()
+    print(hardwrap(base))
+    print()
+    print(softwrap(base))
+    print()
+    print(softwrap(exampleClientCertMessage.decode()))
+    print()
+    print(hardwrap(exampleClientCertMessage.decode()))
+    print()
+    print(softwrap('Signature-Input: ttrp=' + str(sigparams)))
+    print()
+
+    key = ECC.import_key(eccTestKeyPrivate)
+
+    h = SHA256.new(base.encode('utf-8'))
+    signer = DSS.new(key, 'fips-186-3')
+
+    signed = http_sfv.Item(signer.sign(h))
+
+    print("Signed:")
+    print()
+    print(signed)
+    print()
+    print(hardwrap(str(signed).strip(':'), 0))
+    print()
+    print(hardwrap('Signature: ttrp=' + str(signed)))
+    print()
+
+    pubKey = ECC.import_key(eccTestKeyPublic)
+    verifier = DSS.new(pubKey, 'fips-186-3')
+
+    try:
+        verified = verifier.verify(h, signed.value)
+        print("Verified:")
+        print('> YES!')
+        results['TTRP'] = 'YES'
+        print()
+    except (ValueError, TypeError):
+        print("Verified:")
+        print('> NO!')
+        results['TTRP'] = 'NO'
+        print()
+
+
+if 'min' in args.target:
+    print(colored('*' * 30, 'blue'))
+
+    ## minimal signature
+    print(colored('*', 'blue') + ' Minimal Coverage')
+    print(colored('*' * 30, 'blue'))
+
+
+    components = parse_components(exampleRequestMessage)
+
+    siginput = generate_base(
+        components, 
+        ( # covered components list
+        ),
+        {
+            'created': 1618884473,
+            'keyid': 'test-key-rsa-pss',
+            'nonce': 'b3k2pp5k7z-50gnwp.yemd'
+        }
+    )
+
+    base = siginput['signatureInput']
+    sigparams = siginput['signatureParams']
+
+    print("Base string:")
+    print()
+    print(base)
+    print()
+    print(hardwrap(base))
+    print()
+    print(softwrap(base))
+    print()
+    print(softwrap('Signature-Input: sig-b21=' + str(sigparams)))
+    print()
+
+    key = RSA.import_key(PKCS8.unwrap(PEM.decode(rsaTestKeyPssPrivate)[0])[1])
+
+    h = SHA512.new(base.encode('utf-8'))
+    signer = pss.new(key, mask_func=mgf512, salt_bytes=64)
+
+    signed = http_sfv.Item(signer.sign(h))
+
+    print("Signed:")
+    print(signed)
+    print()
+    print(hardwrap(str(signed).strip(':'), 0))
+    print()
+    print(hardwrap('Signature: sig-b21=' + str(signed)))
+
+    print()
+
+    pubKey = RSA.import_key(rsaTestKeyPssPublic)
+    verifier = pss.new(pubKey, mask_func=mgf512, salt_bytes=64)
+
+    try:
+        verified = verifier.verify(h, signed.value)
+        print("Verified:")
+        print('> YES!')
+        results['Minimal Coverage'] = 'YES'
+        print()
+    except (ValueError, TypeError):
+        print("Verified:")
+        print('> NO!')
+        results['TLSMinimal Coverage'] = 'NO'
+        print()
+
+if 'header' in args.target:
+    print(colored('*' * 30, 'blue'))
+
+    ## header coverage
+    print(colored('*', 'blue') + ' Header Coverage')
+    print(colored('*' * 30, 'blue'))
+
+    components = parse_components(exampleRequestMessage)
+
+    components = add_content_digest(components)
+    cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
+
+    print('Content Digest:')
+    print()
+    print(str(cd['val']))
+    print()
+    print(hardwrap(str(cd['val'])))
+    print()
+    print(hardwrap('Content-Digest: ' + str(cd['val'])))
+    print()
+
+    siginput = generate_base(
+        components, 
+        ( # covered components list
+            { 'id': "@authority" },
+            { 'id': "content-digest" },
+            { 'id': "@query-param", "name": "Pet"}
+        ),
+        {
+            'created': 1618884473,
+            'keyid': 'test-key-rsa-pss',
+            'tag': 'header-example'
+        }
+    )
+
+    base = siginput['signatureInput']
+    sigparams = siginput['signatureParams']
+
+    print("Base string:")
+    print()
+    print(base)
+    print()
+    print(hardwrap(base))
+    print()
+    print(softwrap(base))
+    print()
+    print(softwrap('Signature-Input: sig-b22=' + str(sigparams)))
+    print()
+
+    key = RSA.import_key(PKCS8.unwrap(PEM.decode(rsaTestKeyPssPrivate)[0])[1])
+
+    h = SHA512.new(base.encode('utf-8'))
+    signer = pss.new(key, mask_func=mgf512, salt_bytes=64)
+
+    signed = http_sfv.Item(signer.sign(h))
+
+    print("Signed:")
+    print()
+    print(signed)
+    print()
+    print(hardwrap(str(signed).strip(':'), 0))
+    print()
+    print(hardwrap('Signature: sig-b22=' + str(signed)))
+    print()
+
+    pubKey = RSA.import_key(rsaTestKeyPssPublic)
+    verifier = pss.new(pubKey, mask_func=mgf512, salt_bytes=64)
+
+    try:
+        verified = verifier.verify(h, signed.value)
+        print("Verified:")
+        print('> YES!')
+        results['Header Coverage'] = 'YES'
+        print()
+    except (ValueError, TypeError):
+        print("Verified:")
+        print('> NO!')
+        results['Header Coverage'] = 'NO'
+        print()
+
+if 'full' in args.target:
+    print(colored('*' * 30, 'blue'))
+
+    ## full coverage
+    print(colored('*', 'blue') + ' Full Coverage')
+    print(colored('*' * 30, 'blue'))
+
+    components = parse_components(exampleRequestMessage)
+
+    components = add_content_digest(components)
+    cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
+
+    print('Content Digest:')
+    print()
+    print(str(cd['val']))
+    print()
+    print(hardwrap(str(cd['val'])))
+    print()
+    print(hardwrap('Content-Digest: ' + str(cd['val'])))
+    print()
+
+    siginput = generate_base(
+        components, 
+        ( # covered components list
+            { 'id': "date" },
+            { 'id': "@method" },
+            { 'id': "@path" },
+            { 'id': "@query" },
+            { 'id': "@authority" },
+            { 'id': "content-type" },
+            { 'id': "content-digest" },
+            { 'id': "content-length" }
+        ),
+        {
+            'created': 1618884473,
+            'keyid': 'test-key-rsa-pss'
+        }
+    )
+
+    base = siginput['signatureInput']
+    sigparams = siginput['signatureParams']
+
+    print("Base string:")
+    print()
+    print(base)
+    print()
+    print(hardwrap(base))
+    print()
+    print(softwrap(base))
+    print()
+    print(softwrap('Signature-Input: sig-b23=' + str(sigparams)))
+    print()
+
+    key = RSA.import_key(PKCS8.unwrap(PEM.decode(rsaTestKeyPssPrivate)[0])[1])
+
+    h = SHA512.new(base.encode('utf-8'))
+    signer = pss.new(key, mask_func=mgf512, salt_bytes=64)
+
+    signed = http_sfv.Item(signer.sign(h))
+
+    print("Signed:")
+    print(signed)
+    print()
+    print(hardwrap(str(signed).strip(':'), 0))
+    print()
+    print(hardwrap('Signature: sig-b23=' + str(signed)))
+    print()
+
+    pubKey = RSA.import_key(rsaTestKeyPssPublic)
+    verifier = pss.new(pubKey, mask_func=mgf512, salt_bytes=64)
+
+    try:
+        verified = verifier.verify(h, signed.value)
+        print("Verified:")
+        print('> YES!')
+        results['Full Coverage'] = 'YES'
+        print()
+    except (ValueError, TypeError):
+        print("Verified:")
+        print('> NO!')
+        results['Full Coverage'] = 'NO'
+        print()
+
+if 'eccres' in args.target:
+    print(colored('*' * 30, 'blue'))
+
+    ## ECC
+    print(colored('*', 'blue') + ' ECC Response')
+    print(colored('*' * 30, 'blue'))
+
+    components = parse_components(exampleResponseMessage)
+
+    components = add_content_digest(components)
+    cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
+
+    print('Content Digest:')
+    print()
+    print(str(cd['val']))
+    print()
+    print(hardwrap(str(cd['val'])))
+    print()
+    print(hardwrap('Content-Digest: ' + str(cd['val'])))
+    print()
+
+    siginput = generate_base(
+        components, 
+        ( # covered components list
+            { 'id': "@status" },
+            { 'id': "content-type" },
+            { 'id': "content-digest" },
+            { 'id': "content-length" }
+        ),
+        {
+            'created': 1618884473,
+            'keyid': 'test-key-ecc-p256'
+        }
+    )
+
+    base = siginput['signatureInput']
+    sigparams = siginput['signatureParams']
+
+    print("Base string:")
+    print()
+    print(base)
+    print()
+    print(hardwrap(base))
+    print()
+    print(softwrap(base))
+    print()
+    print(softwrap('Signature-Input: sig-b24=' + str(sigparams)))
+    print()
+
+    key = ECC.import_key(eccTestKeyPrivate)
+
+    h = SHA256.new(base.encode('utf-8'))
+    signer = DSS.new(key, 'fips-186-3')
+
+    signed = http_sfv.Item(signer.sign(h))
+
+    print("Signed:")
+    print()
+    print(signed)
+    print()
+    print(hardwrap(str(signed).strip(':'), 0))
+    print()
+    print(hardwrap('Signature: sig-b24=' + str(signed)))
+    print()
+
+    pubKey = ECC.import_key(eccTestKeyPublic)
+    verifier = DSS.new(pubKey, 'fips-186-3')
+
+    try:
+        verified = verifier.verify(h, signed.value)
+        print("Verified:")
+        print('> YES!')
+        results['ECC Response'] = 'YES'
+        print()
+    except (ValueError, TypeError):
+        print("Verified:")
+        print('> NO!')
+        results['ECC Response'] = 'NO'
+        print()
+
+if 'hmac' in args.target:
+    print(colored('*' * 30, 'blue'))
+
+    ## HMAC coverage
+    print(colored('*', 'blue') + ' HMAC Coverage')
+    print(colored('*' * 30, 'blue'))
+
+    components = parse_components(exampleRequestMessage)
+
+    siginput = generate_base(
+        components, 
+        ( # covered components list
+            { 'id': "date" },
+            { 'id': "@authority" },
+            { 'id': "content-type" }
+        ),
+        {
+            'created': 1618884473,
+            'keyid': 'test-shared-secret'
+        }
+    )
+
+    base = siginput['signatureInput']
+    sigparams = siginput['signatureParams']
+
+    print("Base string:")
+    print()
+    print(base)
+    print()
+    print(hardwrap(base))
+    print()
+    print(softwrap(base))
+    print()
+    print(softwrap('Signature-Input: sig-b25=' + str(sigparams)))
+    print()
+
+    key = base64.b64decode(sharedSecret)
+
+    signer = HMAC.new(key, digestmod=SHA256)
+    signer.update(base.encode('utf-8'))
+
+    signed = http_sfv.Item(signer.digest())
+
+    print("Signed:")
+    print()
+    print(signed)
+    print()
+    print(hardwrap(str(signed).strip(':'), 0))
+    print()
+    print(hardwrap('Signature: sig-b25=' + str(signed)))
+    print()
+
+    results['HMAC'] = 'LOL' # this is silly but ...
+
+if 'reqres' in args.target:
+    print(colored('*' * 30, 'blue'))
+
+    ## Request-Response
+    print(colored('*', 'blue') + ' Request-Response')
+    print(colored('*' * 30, 'blue'))
+
+    reqComponents = parse_components(exampleReverseProxyMessage)
+    reqComponents = add_content_digest(reqComponents)
+
+    # Add Signature
+
+    siginput = generate_base(
+        reqComponents, 
+        ( # covered components list
+            { 'id': "@method" },
+            { 'id': '@authority' },
+            { 'id': "@path" }, 
+            { 'id': "content-digest" },
+            { 'id': "content-type" },
+            { 'id': "content-length" }
+        ),
+        {
+            'created': 1618884475,
+            'keyid': 'test-key-rsa-pss'
+        }
+    )
+
+    base = siginput['signatureInput']
+    sigparams = siginput['signatureParams']
+
+    print("Client Base string:")
+    print()
+    print(base)
+    print()
+    print(hardwrap(base))
+    print()
+    print(softwrap(base))
+    print()
+    print(softwrap(exampleReverseProxyClientMessage.decode()))
+    print()
+    print(hardwrap(exampleReverseProxyClientMessage.decode()))
+    print()
+    print(softwrap('Signature-Input: sig1=' + str(sigparams)))
+    print()
+
+    key = RSA.import_key(PKCS8.unwrap(PEM.decode(rsaTestKeyPssPrivate)[0])[1])
+
+    h = SHA512.new(base.encode('utf-8'))
+    signer = pss.new(key, mask_func=mgf512, salt_bytes=64)
+
+    signed = http_sfv.Item(signer.sign(h))
+
+    print("Client Signed:")
+    print()
+    print(signed)
+    print()
+    print(hardwrap(str(signed).strip(':'), 0))
+    print()
+    print(hardwrap('Signature: sig1=' + str(signed)))
+    print()
+
+
+    pubKey = RSA.import_key(rsaTestKeyPssPublic)
+    verifier = pss.new(pubKey, mask_func=mgf512, salt_bytes=64)
+
+    try:
+        verified = verifier.verify(h, signed.value)
+        print("Verified:")
+        print('> YES!')
+        results['Client Req'] = 'YES'
+        print()
+    except (ValueError, TypeError):
+        print("Verified:")
+        print('> NO!')
+        results['Client Req'] = 'NO'
+        print()
+
+    # Add client signature
+    sigfield = http_sfv.Dictionary()
+    sigfield['sig1'] = signed
+
+    cid = http_sfv.Item('Signature'.lower())
+    reqComponents['fields'].append(
+        {
+            'id': cid.value,
+            'cid': str(cid),
+            'val': str(sigfield)
+        }
+    )
+    cid = http_sfv.Item('Signature'.lower())
+    cid.params['key'] = 'sig1'
+    reqComponents['fields'].append(
+        {
+            'id': cid.value,
+            'cid': str(cid),
+            'key': 'sig1',
+            'val': str(signed)
+        }
+    )
+
+    siginputfield = http_sfv.Dictionary()
+    sigin = http_sfv.InnerList()
+    sigin.parse(sigparams.encode('utf-8')) # we have to re-parse because we're handed the string not the Item
+    siginputfield['sig1'] = sigin
+
+    cid = http_sfv.Item('Signature-Input'.lower())
+    reqComponents['fields'].append(
+        {
+            'id': cid.value,
+            'cid': str(cid),
+            'val': str(siginputfield)
+        }
+    )
+    cid = http_sfv.Item('Signature-Input'.lower())
+    cid.params['key'] = 'sig1'
+    reqComponents['fields'].append(
+        {
+            'id': cid.value,
+            'cid': str(cid),
+            'key': 'sig1',
+            'val': str(sigin)
+        }
+    )
+
+
+
+
+
+    components = parse_components(exampleRequestResponseMessage)
+
+    components = add_content_digest(components)
+    cd = next((x for x in reqComponents['fields'] if x['id'] == "content-digest"), None)
+
+    print('Content Digest:')
+    print()
+    print(str(cd['val']))
+    print()
+    print(hardwrap(str(cd['val'])))
+    print()
+    print(hardwrap('Content-Digest: ' + str(cd['val'])))
+    print()
+
+    siginput = generate_base(
+        components, 
+        ( # covered components list
+            { 'id': "@status" },
+            { 'id': "content-length" },
+            { 'id': "content-type" },
+            { 'id': "signature", 'key': "sig1", 'req': True },
+            { 'id': "signature-input", 'key': "sig1", 'req': True },
+            { 'id': "@authority", 'req': True },
+            { 'id': "@method", 'req': True }
+        ),
+        {
+            'created': 1618884479,
+            'keyid': 'test-key-ecc-p256'
+        },
+        reqComponents
+    )
+
+    base = siginput['signatureInput']
+    sigparams = siginput['signatureParams']
+
+    print("Base string:")
+    print()
+    print(base)
+    print()
+    print(hardwrap(base))
+    print()
+    print(softwrap(base))
+    print()
+    print(softwrap(exampleReverseProxyMessage.decode()))
+    print()
+    print(hardwrap(exampleReverseProxyMessage.decode()))
+    print()
+    print(softwrap(exampleRequestResponseMessage.decode()))
+    print()
+    print(hardwrap(exampleRequestResponseMessage.decode()))
+    print()
+    print(softwrap('Signature-Input: reqres=' + str(sigparams)))
+    print()
+
+    key = ECC.import_key(eccTestKeyPrivate)
+
+    h = SHA256.new(base.encode('utf-8'))
+    signer = DSS.new(key, 'fips-186-3')
+
+    signed = http_sfv.Item(signer.sign(h))
+
+    print("Signed:")
+    print(signed)
+    print()
+    print(hardwrap(str(signed).strip(':'), 0))
+    print()
+    print(hardwrap('Signature: reqres=' + str(signed)))
+    print()
+
+    pubKey = ECC.import_key(eccTestKeyPublic)
+    verifier = DSS.new(pubKey, 'fips-186-3')
+
+    try:
+        verified = verifier.verify(h, signed.value)
+        print("Verified:")
+        results['Request Response: Related-Response'] = 'YES'
+        print('> YES!')
+        print()
+    except (ValueError, TypeError):
+        print("Verified:")
+        print('> NO!')
+        results['Request Response: Related-Response'] = 'NO'
+        print()
+
+if 'static' in args.target:
+    
+    print(colored('*' * 30, 'blue'))
+
+    # Static signature test
+
+    print('HTTPSig Static Test 1')
+    print(colored('*' * 30, 'blue'))
+
+
+    components = parse_components(exampleReverseProxyMessage)
+
+    components = add_content_digest(components)
+    cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
+
+    print('Content Digest:')
+    print()
+    print(str(cd['val']))
+    print()
+    print(hardwrap(str(cd['val'])))
+    print()
+    print(hardwrap('Content-Digest: ' + str(cd['val'])))
+    print()
+
+    siginput = generate_base(
+        components, 
+        ( # covered components list
+            { 'id': "@method" },
+            { 'id': "@authority" },
+            { 'id': "@path" },
+            { 'id': "content-digest"},
+            { 'id': "content-length"},
+            { 'id': "content-type"}
+        ),
+        {
+            'created': 1618884473,
+            'keyid': 'test-key-rsa-pss'
+        }
+    )
+
+    base = siginput['signatureInput']
+    sigparams = siginput['signatureParams']
+
+    print("Base string:")
+    print()
+    print(base)
+    print()
+    print(hardwrap(base))
+    print()
+    print(softwrap(base))
+    print()
+    print(softwrap(exampleReverseProxyMessage.decode()))
+    print()
+    print(hardwrap(exampleReverseProxyMessage.decode()))
+    print()
+    print(softwrap('Signature-Input: reqres=' + str(sigparams)))
+    print()
+
+    h = SHA512.new(base.encode('utf-8'))
+
+    signed = http_sfv.Item()
+
+    signed.parse(':LAH8BjcfcOcLojiuOBFWn0P5keD3xAOuJRGziCLuD8r5MW9S0RoXXLzLSRfGY/3SF8kVIkHjE13SEFdTo4Af/fJ/Pu9wheqoLVdwXyY/UkBIS1M8Brc8IODsn5DFIrG0IrburbLi0uCc+E2ZIIb6HbUJ+o+jP58JelMTe0QE3IpWINTEzpxjqDf5/Df+InHCAkQCTuKsamjWXUpyOT1Wkxi7YPVNOjW4MfNuTZ9HdbD2Tr65+BXeTG9ZS/9SWuXAc+BZ8WyPz0QRz//ec3uWXd7bYYODSjRAxHqX+S1ag3LZElYyUKaAIjZ8MGOt4gXEwCSLDv/zqxZeWLj/PDkn6w==:'.encode('utf-8'))
+
+    pubKey = RSA.import_key(rsaTestKeyPssPublic)
+    verifier = pss.new(pubKey, mask_func=mgf512, salt_bytes=64)
+
+    try:
+        verified = verifier.verify(h, signed.value)
+        print("Verified:")
+        print('> YES!')
+        results['Static 1'] = 'YES'
+        print()
+    except (ValueError, TypeError):
+        print("Verified:")
+        print('> NO!')
+        results['Static 1'] = 'NO'
+        print()
+
+
+    print(colored('*' * 30, 'blue'))
+
+    # Static signature test
+
+    print('HTTPSig Static Test 3')
+    print(colored('*' * 30, 'blue'))
+
+
+    base = '''"@method": POST
+    "@authority": example.com
+    "@path": /foo
+    "content-digest": sha-512=:WZDPaVn/7XgHaAy8pmojAkGWoRx2UFChF41A2svX+TaPm+AbwAgBWnrIiYllu7BNNyealdVLvRwEmTHWXvJwew==:
+    "content-length": 18
+    "content-type": application/json
+    "@signature-params": ("@method" "@authority" "@path" "content-digest" "content-length" "content-type");created=1618884473;keyid="test-key-rsa-pss"'''
+
+    h = SHA512.new(base.encode('utf-8'))
+
+    signed = http_sfv.Item()
+
+    signed.parse(':LAH8BjcfcOcLojiuOBFWn0P5keD3xAOuJRGziCLuD8r5MW9S0RoXXLzLSRfGY/3SF8kVIkHjE13SEFdTo4Af/fJ/Pu9wheqoLVdwXyY/UkBIS1M8Brc8IODsn5DFIrG0IrburbLi0uCc+E2ZIIb6HbUJ+o+jP58JelMTe0QE3IpWINTEzpxjqDf5/Df+InHCAkQCTuKsamjWXUpyOT1Wkxi7YPVNOjW4MfNuTZ9HdbD2Tr65+BXeTG9ZS/9SWuXAc+BZ8WyPz0QRz//ec3uWXd7bYYODSjRAxHqX+S1ag3LZElYyUKaAIjZ8MGOt4gXEwCSLDv/zqxZeWLj/PDkn6w==:'.encode('utf-8'))
+
+    pubKey = RSA.import_key(rsaTestKeyPssPublic)
+    verifier = pss.new(pubKey, mask_func=mgf512, salt_bytes=64)
+
+    try:
+        verified = verifier.verify(h, signed.value)
+        print("Verified:")
+        print('> YES!')
+        results['Static 3'] = 'YES'
+        print()
+    except (ValueError, TypeError):
+        print("Verified:")
+        print('> NO!')
+        results['Static 3'] = 'NO'
+        print()
+
+    print(colored('*' * 30, 'blue'))
+
+    ## ED 25519
+    print('ed25519 signature')
+    print(colored('*' * 30, 'blue'))
+
+    components = parse_components(exampleRequestMessage)
+
+    siginput = generate_base(
+        components, 
+        ( # covered components list
+            { 'id': "date" },
+            { 'id': "@method" },
+            { 'id': "@path" },
+            { 'id': "@authority" },
+            { 'id': "content-type" },
+            { 'id': "content-length" }
+        ),
+        {
+            'created': 1618884473,
+            'keyid': 'test-key-ed25519'
+        }
+    )
+
+    base = siginput['signatureInput']
+    sigparams = siginput['signatureParams']
+
+    print("Base string:")
+    print()
+    print(base)
+    print()
+    print(hardwrap(base))
+    print()
+    print(softwrap(base))
+    print()
+    print(softwrap('Signature-Input: sig-b26=' + str(sigparams)))
+    print()
+
+    # Unpack private key, format is not supported by Cryptodomex PEM parser
+    der = DerOctetString()
+    der.decode(PKCS8.unwrap(PEM.decode(ed25519TestKeyPrivate)[0])[1])
+    key = SigningKey(der.payload)
+
+    h = base.encode('utf-8')
+    signed = http_sfv.Item(key.sign(h).signature)
+
+    print("Signed:")
+    print(signed)
+    print()
+    print(hardwrap(str(signed).strip(':'), 0))
+    print()
+    print(hardwrap('Signature: sig-b26=' + str(signed)))
+    print()
+
+    # Unpack public key, format is not supported by Cryptodomex PEM parser
+
+    # sequence of ID and BitString
+    ds = DerSequence()
+    ds.decode(PEM.decode(ed25519TestKeyPublic)[0])
+    bs = DerBitString()
+    bs.decode(ds[1])
+    # the first byte of the bitstring is "0" for some reason??
+    pubKey = VerifyKey(bs.payload[1:])
+
+    try:
+        verified = pubKey.verify(h, signed.value)
+        print("Verified:")
+        print('> YES!')
+        results['Ed25519'] = 'YES'
+        print()
+    except (ValueError, TypeError):
+        print("Verified:")
+        print('> NO!')
+        results['Ed25519'] = 'NO'
+        print()
+
+    print(colored('*' * 30, 'blue'))
+
+    # Static HTTP test (ECC)
+    print('HTTPSig Static Test 2')
+    print(colored('*' * 30, 'blue'))
+
+
+    base = '''"@authority": example.com
+    "date": Tue, 20 Apr 2021 02:07:55 GMT
+    "content-type": application/json
+    "@signature-params": ("@authority" "date" "content-type");created=1618884475;keyid="test-key-p256"'''
+
+    h = SHA256.new(base.encode('utf-8'))
+
+    signed = http_sfv.Item()
+
+    signed.parse(':qsAR/kVQiTST/oyJfHust6m1Z6qKTrAF7GKPPtRN7LyasFY3PW8t+0U9Fn9wNeXeZ7MVwZjw2LAxbh8gxT2LYg==:'.encode('utf-8'))
+
+    pubKey = ECC.import_key(p256PubKey)
+    verifier = DSS.new(pubKey, 'fips-186-3')
+
+    try:
+        verified = verifier.verify(h, signed.value)
+        print("Verified:")
+        print('> YES!')
+        results['Static 2'] = 'YES'
+        print()
+    except (ValueError, TypeError):
+        print("Verified:")
+        print('> NO!')
+        results['Static 2'] = 'NO'
+        print()
+
+if 'format' in args.target:
+    print(colored('*' * 30, 'blue'))
+
+    # Static Header formatting
+    print(colored('*', 'blue') + ' Static header formatting')
+    print(colored('*' * 30, 'blue'))
+
+    msg = b"""GET / HTTP/1.1
+    Host: www.example.com
+    Date: Tue, 20 Apr 2021 02:07:56 GMT
+    X-OWS-Header:   Leading and trailing whitespace.
+    X-Obs-Fold-Header: Obsolete
+        line folding.
+    Cache-Control: max-age=60
+    Cache-Control:    must-revalidate
+    Example-Dict:  a=1,    b=2;x=1;y=2,   c=(a   b   c)
+    """
+
+    components = parse_components(msg)
+
+    siginput = generate_base(
+        components, 
+        ( # covered components list
+            { 'id': "host" },
+            { 'id': "date" },
+            { 'id': "x-ows-header" },
+            { 'id': "x-obs-fold-header" },
+            { 'id': "cache-control" },
+            { 'id': "example-dict" },
+            { 'id': "example-dict", 'sf': True },
+            { 'id': "example-dict", 'key': 'a' },
+            { 'id': "example-dict", 'key': 'b' },
+            { 'id': "example-dict", 'key': 'c' }
+        ),
+        {
+        }
+    )
+
+    base = siginput['signatureInput']
+    sigparams = siginput['signatureParams']
+
+    print("Base string:")
+    print()
+    print(base)
+    print()
+    print(hardwrap(base))
+    print()
+    print(softwrap(base))
+    print()
+
+if 'transform' in args.target:
+    print(colored('*' * 30, 'blue'))
+
+
+    ## Transformed Messages
+    print('Transformed Messages')
+    print(colored('*' * 30, 'blue'))
+
+    print('Original message:')
+    print()
+    print(softwrap(exampleGetRequest1.decode()))
+    print()
+
+    components = parse_components(exampleGetRequest1)
+
+    siginput = generate_base(
+        components, 
+        ( # covered components list
+            { 'id': "@method" },
+            { 'id': "@path" },
+            { 'id': "@authority" },
+            { 'id': "accept" }
+        ),
+        {
+            'created': 1618884473,
+            'keyid': 'test-key-ed25519'
+        }
+    )
+
+    base = siginput['signatureInput']
+    sigparams = siginput['signatureParams']
+
+    print("Base string:")
+    print()
+    print(base)
+    print()
+    print(hardwrap(base))
+    print()
+    print(softwrap(base))
+    print()
+    print(softwrap('Signature-Input: transform=' + str(sigparams)))
+    print()
+
+    # Unpack private key, format is not supported by Cryptodomex PEM parser
+    der = DerOctetString()
+    der.decode(PKCS8.unwrap(PEM.decode(ed25519TestKeyPrivate)[0])[1])
+    key = SigningKey(der.payload)
+
+    h = base.encode('utf-8')
+    signed = http_sfv.Item(key.sign(h).signature)
+
+    print("Signed:")
+    print(signed)
+    print()
+    print(hardwrap(str(signed).strip(':'), 0))
+    print()
+    print(hardwrap('Signature: transform=' + str(signed)))
+    print()
+
+    # Unpack public key, format is not supported by Cryptodomex PEM parser
+
+    # sequence of ID and BitString
+    ds = DerSequence()
+    ds.decode(PEM.decode(ed25519TestKeyPublic)[0])
+    bs = DerBitString()
+    bs.decode(ds[1])
+    # the first byte of the bitstring is "0" for some reason??
+    pubKey = VerifyKey(bs.payload[1:])
+
+    try:
+        verified = pubKey.verify(h, signed.value)
+        print("Verified:")
+        print('> YES!')
+        results['transform1'] = 'YES'
+        print()
+    except (ValueError, TypeError):
+        print("Verified:")
+        print('> NO!')
+        results['transform1'] = 'NO'
+        print()
+
+
+    ## now test other messages
+    print('Alternate message 2:')
+    print()
+    print(softwrap(exampleGetRequest2.decode()))
+    print()
+
+    components = parse_components(exampleGetRequest2)
+
+    siginput = generate_base(
+        components, 
+        ( # covered components list
+            { 'id': "@method" },
+            { 'id': "@path" },
+            { 'id': "@authority" },
+            { 'id': "accept" }
+        ),
+        {
+            'created': 1618884473,
+            'keyid': 'test-key-ed25519'
+        }
+    )
+
+    base = siginput['signatureInput']
+    h = base.encode('utf-8')
+
+    try:
+        verified = pubKey.verify(h, signed.value)
+        print("Verified:")
+        print('> YES!')
+        results['transform2'] = 'YES'
+        print()
+    except (ValueError, TypeError):
+        print("Verified:")
+        print('> NO!')
+        results['transform2'] = 'NO'
+        print()
+
+    print('Alternate message 3:')
+    print()
+    print(softwrap(exampleGetRequest3.decode()))
+    print()
+
+    components = parse_components(exampleGetRequest3)
+
+    siginput = generate_base(
+        components, 
+        ( # covered components list
+            { 'id': "@method" },
+            { 'id': "@path" },
+            { 'id': "@authority" },
+            { 'id': "accept" }
+        ),
+        {
+            'created': 1618884473,
+            'keyid': 'test-key-ed25519'
+        }
+    )
+
+    base = siginput['signatureInput']
+    h = base.encode('utf-8')
+
+    try:
+        verified = pubKey.verify(h, signed.value)
+        print("Verified:")
+        print('> YES!')
+        results['transform3'] = 'YES'
+        print()
+    except (ValueError, TypeError):
+        print("Verified:")
+        print('> NO!')
+        results['transform3'] = 'NO'
+        print()
+
+    print('Alternate message 4:')
+    print()
+    print(softwrap(exampleGetRequest4.decode()))
+    print()
+
+    components = parse_components(exampleGetRequest4)
+
+    siginput = generate_base(
+        components, 
+        ( # covered components list
+            { 'id': "@method" },
+            { 'id': "@path" },
+            { 'id': "@authority" },
+            { 'id': "accept" }
+        ),
+        {
+            'created': 1618884473,
+            'keyid': 'test-key-ed25519'
+        }
+    )
+
+    base = siginput['signatureInput']
+    h = base.encode('utf-8')
+
+    try:
+        verified = pubKey.verify(h, signed.value)
+        print("Verified:")
+        print('> YES!')
+        results['transform4'] = 'YES'
+        print()
+    except (ValueError, TypeError):
+        print("Verified:")
+        print('> NO!')
+        results['transform4'] = 'NO'
+        print()
+
+    print('Alternate message Bad 1:')
+    print()
+    print(softwrap(exampleGetRequest_bad1.decode()))
+    print()
+
+    components = parse_components(exampleGetRequest_bad1)
+
+    siginput = generate_base(
+        components, 
+        ( # covered components list
+            { 'id': "@method" },
+            { 'id': "@path" },
+            { 'id': "@authority" },
+            { 'id': "accept" }
+        ),
+        {
+            'created': 1618884473,
+            'keyid': 'test-key-ed25519'
+        }
+    )
+
+    base = siginput['signatureInput']
+    h = base.encode('utf-8')
+
+    try:
+        verified = pubKey.verify(h, signed.value)
+        print("Failed:")
+        print('> NO!')
+        results['transform bad1'] = 'NO' # this is supposed to fail
+        print()
+    except (ValueError, TypeError, BadSignatureError):
+        print("Failed:")
+        print('> YES!')
+        results['transform bad1'] = 'YES' # this is supposed to fail
+        print()
+
+    print('Alternate message Bad 2:')
+    print()
+    print(softwrap(exampleGetRequest_bad2.decode()))
+    print()
+
+    components = parse_components(exampleGetRequest_bad2)
+
+    siginput = generate_base(
+        components, 
+        ( # covered components list
+            { 'id': "@method" },
+            { 'id': "@path" },
+            { 'id': "@authority" },
+            { 'id': "accept" }
+        ),
+        {
+            'created': 1618884473,
+            'keyid': 'test-key-ed25519'
+        }
+    )
+
+    base = siginput['signatureInput']
+    h = base.encode('utf-8')
+
+    try:
+        verified = pubKey.verify(h, signed.value)
+        print("Failed:")
+        print('> NO!')
+        results['transform bad2'] = 'NO' # this is supposed to fail
+        print()
+    except (ValueError, TypeError, BadSignatureError):
+        print("Failed:")
+        print('> YES!')
+        results['transform bad2'] = 'YES' # this is supposed to fail
+        print()
+
 
 print(colored('*' * 30, 'blue'))
-print('* Example Messages')
-print(colored('*' * 30, 'blue'))
 
-print()
-print(hardwrap(exampleRequestMessage.decode()))
-print()
 
-components = parse_components(exampleRequestMessage)
-components = add_content_digest(components)
-cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
 
-print()
-print(str(cd['val']))
-print()
-print(hardwrap(str(cd['val'])))
-print()
-print(hardwrap('Content-Digest: ' + str(cd['val'])))
-print()
 
 
-print(hardwrap(exampleResponseMessage.decode()))
-print()
-components = parse_components(exampleResponseMessage)
-components = add_content_digest(components)
-cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
-
-print()
-print(str(cd['val']))
-print()
-print(hardwrap(str(cd['val'])))
-print()
-print(hardwrap('Content-Digest: ' + str(cd['val'])))
-print()
-
-
-## Base example pieces
-
-print(colored('*' * 30, 'blue'))
-print('* Covered Content RSAPSS Test')
-print(colored('*' * 30, 'blue'))
-
-
-components = parse_components(exampleRequestMessage)
-
-components = add_content_digest(components)
-cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
-
-print("Content Digest:")
-print()
-print(str(cd['val']))
-print()
-print(hardwrap(str(cd['val'])))
-print()
-print(hardwrap('Content-Digest: ' + str(cd['val'])))
-print()
-
-siginput = generate_base(
-    components, 
-    ( # covered components list
-        { 'id': "@method" }, 
-        { 'id': "@authority" },
-        { 'id': "@path" },
-        { 'id': "content-digest" },
-        { 'id': "content-length" },
-        { 'id': "content-type" }
-    ),
-    {
-        'created': 1618884473,
-        'keyid': 'test-key-rsa-pss'
-    }
-)
-
-base = siginput['signatureInput']
-sigparams = siginput['signatureParams']
-
-print("Base string:")
-print()
-print(base)
-print()
-print(hardwrap(base))
-print()
-print(softwrap(base))
-print()
-print(softwrap('Signature-Input: sig1=' + str(sigparams)))
-print()
-
-key = RSA.import_key(PKCS8.unwrap(PEM.decode(rsaTestKeyPssPrivate)[0])[1])
-
-h = SHA512.new(base.encode('utf-8'))
-signer = pss.new(key, mask_func=mgf512, salt_bytes=64)
-
-signed = http_sfv.Item(signer.sign(h))
-
-print("Signed:")
-print()
-print(signed)
-print()
-print(hardwrap(str(signed).strip(':'), 0))
-print()
-print(hardwrap('Signature: sig1=' + str(signed)))
-print()
-
-# publicKey = M2Crypto.RSA.load_key_string(rsaTestKeyPssPublic)
-
-pubKey = RSA.import_key(rsaTestKeyPssPublic)
-verifier = pss.new(pubKey, mask_func=mgf512, salt_bytes=64)
-
-try:
-    verified = verifier.verify(h, signed.value)
-    print("Verified:")
-    print('> YES!')
-    results['Covered Content RSAPSS Test'] = 'YES'
-    print()
-except (ValueError, TypeError):
-    print("Verified:")
-    print('> NO!')
-    results['Covered Content RSAPSS Test'] = 'NO'
-    print()
-
-print(colored('*' * 30, 'blue'))
-
-## reverse proxy signature
-print('* Reverse Proxy Signature ')
-print(colored('*' * 30, 'blue'))
-
-# Plain message
-components = parse_components(exampleReverseProxyClientMessage)
-
-# Add content digest
-components = add_content_digest(components)
-cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
-
-print('Content Digest:')
-print()
-print(str(cd['val']))
-print()
-print(hardwrap(str(cd['val'])))
-print()
-print(hardwrap('Content-Digest: ' + str(cd['val'])))
-print()
-
-# Add Signature
-
-siginput = generate_base(
-    components, 
-    ( # covered components list
-        { 'id': "@method" },
-        { 'id': '@authority' },
-        { 'id': "@path" }, 
-        { 'id': "content-digest" },
-        { 'id': "content-type" },
-        { 'id': "content-length" }
-    ),
-    {
-        'created': 1618884475,
-        'keyid': 'test-key-ecc-p256'
-    }
-)
-
-base = siginput['signatureInput']
-sigparams = siginput['signatureParams']
-
-print("Client Base string:")
-print()
-print(base)
-print()
-print(hardwrap(base))
-print()
-print(softwrap(base))
-print()
-print(softwrap(exampleReverseProxyClientMessage.decode()))
-print()
-print(hardwrap(exampleReverseProxyClientMessage.decode()))
-print()
-print(softwrap('Signature-Input: sig1=' + str(sigparams)))
-print()
-
-key = ECC.import_key(eccTestKeyPrivate)
-
-h = SHA256.new(base.encode('utf-8'))
-signer = DSS.new(key, 'fips-186-3')
-
-signed = http_sfv.Item(signer.sign(h))
-
-print("Client Signed:")
-print()
-print(signed)
-print()
-print(hardwrap(str(signed).strip(':'), 0))
-print()
-print(hardwrap('Signature: sig1=' + str(signed)))
-print()
-
-
-pubKey = ECC.import_key(eccTestKeyPublic)
-verifier = DSS.new(pubKey, 'fips-186-3')
-
-try:
-    verified = verifier.verify(h, signed.value)
-    print("Verified:")
-    print('> YES!')
-    results['Client Proxy'] = 'YES'
-    print()
-except (ValueError, TypeError):
-    print("Verified:")
-    print('> NO!')
-    results['Client Proxy'] = 'NO'
-    print()
-
-
-components = parse_components(exampleReverseProxyMessage)
-
-# Add client signature
-sigfield = http_sfv.Dictionary()
-sigfield['sig1'] = signed
-
-cid = http_sfv.Item('Signature'.lower())
-components['fields'].append(
-    {
-        'id': cid.value,
-        'cid': str(cid),
-        'val': str(sigfield)
-    }
-)
-cid = http_sfv.Item('Signature'.lower())
-cid.params['key'] = 'sig1'
-components['fields'].append(
-    {
-        'id': cid.value,
-        'cid': str(cid),
-        'key': 'sig1',
-        'val': str(signed)
-    }
-)
-
-siginputfield = http_sfv.Dictionary()
-sigin = http_sfv.InnerList()
-sigin.parse(sigparams.encode('utf-8')) # we have to re-parse because we're handed the string not the Item
-siginputfield['sig1'] = sigin
-
-cid = http_sfv.Item('Signature-Input'.lower())
-components['fields'].append(
-    {
-        'id': cid.value,
-        'cid': str(cid),
-        'val': str(siginputfield)
-    }
-)
-cid = http_sfv.Item('Signature-Input'.lower())
-cid.params['key'] = 'sig1'
-components['fields'].append(
-    {
-        'id': cid.value,
-        'cid': str(cid),
-        'key': 'sig1',
-        'val': str(sigin)
-    }
-)
-
-siginput = generate_base(
-    components, 
-    ( # covered components list
-        { 'id': "signature", 'key': 'sig1' }, 
-        { 'id': "signature-input", 'key': 'sig1' }, 
-        { 'id': "@authority" },
-        { 'id': "@method" },
-        { 'id': "@path" },
-        { 'id': "forwarded" }
-    ),
-    {
-        'created': 1618884480,
-        'keyid': 'test-key-rsa',
-        'alg': 'rsa-v1_5-sha256',
-        'expires': 1618884540
-    }
-)
-
-base = siginput['signatureInput']
-sigparams = siginput['signatureParams']
-
-print("Proxy Base string:")
-print()
-print(base)
-print()
-print(hardwrap(base))
-print()
-print(softwrap(base))
-print()
-print(softwrap(exampleReverseProxyMessage.decode()))
-print()
-print(softwrap(exampleReverseProxyMessage.decode(), 4))
-print()
-print(hardwrap(exampleReverseProxyMessage.decode()))
-print()
-print(hardwrap(exampleReverseProxyMessage.decode(), 4))
-print()
-print(', \\')
-print(softwrap('  proxy_sig=' + str(sigparams), 4))
-print()
-
-key = RSA.import_key(rsaTestKeyPrivate)
-
-h = SHA256.new(base.encode('utf-8'))
-signer = pkcs1_15.new(key)
-
-signed = http_sfv.Item(signer.sign(h))
-
-print("Proxy Signed:")
-print()
-print(signed)
-print()
-print(hardwrap(str(signed).strip(':'), 0))
-print()
-print(', \\')
-print(hardwrap('  proxy_sig=' + str(signed), 4))
-print()
-
-pubKey = RSA.import_key(rsaTestKeyPublic)
-verifier = pkcs1_15.new(pubKey)
-
-try:
-    verified = verifier.verify(h, signed.value)
-    print("Verified:")
-    print('> YES!')
-    results['Reverse Proxy'] = 'YES'
-    print()
-except (ValueError, TypeError):
-    print("Verified:")
-    print('> NO!')
-    results['Reverse Proxy'] = 'NO'
-    print()
-
-print(colored('*' * 30, 'blue'))
-
-## TLS reverse proxy signature
-print('* TLS Reverse Proxy Signature ')
-print(colored('*' * 30, 'blue'))
-
-# message with client cert header
-components = parse_components(exampleClientCertMessage)
-
-siginput = generate_base(
-    components, 
-    ( # covered components list
-        { 'id': "@path" },
-        { 'id': '@query' },
-        { 'id': "@method" }, 
-        { 'id': "@authority" },
-        { 'id': "client-cert" }
-    ),
-    {
-        'created': 1618884473,
-        'keyid': 'test-key-ecc-p256'
-    }
-)
-
-base = siginput['signatureInput']
-sigparams = siginput['signatureParams']
-
-print("Base string:")
-print()
-print(base)
-print()
-print(hardwrap(base))
-print()
-print(softwrap(base))
-print()
-print(softwrap(exampleClientCertMessage.decode()))
-print()
-print(hardwrap(exampleClientCertMessage.decode()))
-print()
-print(softwrap('Signature-Input: ttrp=' + str(sigparams)))
-print()
-
-key = ECC.import_key(eccTestKeyPrivate)
-
-h = SHA256.new(base.encode('utf-8'))
-signer = DSS.new(key, 'fips-186-3')
-
-signed = http_sfv.Item(signer.sign(h))
-
-print("Signed:")
-print()
-print(signed)
-print()
-print(hardwrap(str(signed).strip(':'), 0))
-print()
-print(hardwrap('Signature: ttrp=' + str(signed)))
-print()
-
-pubKey = ECC.import_key(eccTestKeyPublic)
-verifier = DSS.new(pubKey, 'fips-186-3')
-
-try:
-    verified = verifier.verify(h, signed.value)
-    print("Verified:")
-    print('> YES!')
-    results['TTRP'] = 'YES'
-    print()
-except (ValueError, TypeError):
-    print("Verified:")
-    print('> NO!')
-    results['TTRP'] = 'NO'
-    print()
-
-print(colored('*' * 30, 'blue'))
-
-## minimal signature
-print('* Minimal Coverage')
-print(colored('*' * 30, 'blue'))
-
-
-components = parse_components(exampleRequestMessage)
-
-siginput = generate_base(
-    components, 
-    ( # covered components list
-    ),
-    {
-        'created': 1618884473,
-        'keyid': 'test-key-rsa-pss',
-        'nonce': 'b3k2pp5k7z-50gnwp.yemd'
-    }
-)
-
-base = siginput['signatureInput']
-sigparams = siginput['signatureParams']
-
-print("Base string:")
-print()
-print(base)
-print()
-print(hardwrap(base))
-print()
-print(softwrap(base))
-print()
-print(softwrap('Signature-Input: sig-b21=' + str(sigparams)))
-print()
-
-key = RSA.import_key(PKCS8.unwrap(PEM.decode(rsaTestKeyPssPrivate)[0])[1])
-
-h = SHA512.new(base.encode('utf-8'))
-signer = pss.new(key, mask_func=mgf512, salt_bytes=64)
-
-signed = http_sfv.Item(signer.sign(h))
-
-print("Signed:")
-print(signed)
-print()
-print(hardwrap(str(signed).strip(':'), 0))
-print()
-print(hardwrap('Signature: sig-b21=' + str(signed)))
-
-print()
-
-pubKey = RSA.import_key(rsaTestKeyPssPublic)
-verifier = pss.new(pubKey, mask_func=mgf512, salt_bytes=64)
-
-try:
-    verified = verifier.verify(h, signed.value)
-    print("Verified:")
-    print('> YES!')
-    results['Minimal Coverage'] = 'YES'
-    print()
-except (ValueError, TypeError):
-    print("Verified:")
-    print('> NO!')
-    results['TLSMinimal Coverage'] = 'NO'
-    print()
-
-print(colored('*' * 30, 'blue'))
-
-## header coverage
-print('* Header Coverage')
-print(colored('*' * 30, 'blue'))
-
-components = parse_components(exampleRequestMessage)
-
-components = add_content_digest(components)
-cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
-
-print('Content Digest:')
-print()
-print(str(cd['val']))
-print()
-print(hardwrap(str(cd['val'])))
-print()
-print(hardwrap('Content-Digest: ' + str(cd['val'])))
-print()
-
-siginput = generate_base(
-    components, 
-    ( # covered components list
-        { 'id': "@authority" },
-        { 'id': "content-digest" },
-        { 'id': "@query-param", "name": "Pet"}
-    ),
-    {
-        'created': 1618884473,
-        'keyid': 'test-key-rsa-pss',
-        'tag': 'header-example'
-    }
-)
-
-base = siginput['signatureInput']
-sigparams = siginput['signatureParams']
-
-print("Base string:")
-print()
-print(base)
-print()
-print(hardwrap(base))
-print()
-print(softwrap(base))
-print()
-print(softwrap('Signature-Input: sig-b22=' + str(sigparams)))
-print()
-
-key = RSA.import_key(PKCS8.unwrap(PEM.decode(rsaTestKeyPssPrivate)[0])[1])
-
-h = SHA512.new(base.encode('utf-8'))
-signer = pss.new(key, mask_func=mgf512, salt_bytes=64)
-
-signed = http_sfv.Item(signer.sign(h))
-
-print("Signed:")
-print()
-print(signed)
-print()
-print(hardwrap(str(signed).strip(':'), 0))
-print()
-print(hardwrap('Signature: sig-b22=' + str(signed)))
-print()
-
-pubKey = RSA.import_key(rsaTestKeyPssPublic)
-verifier = pss.new(pubKey, mask_func=mgf512, salt_bytes=64)
-
-try:
-    verified = verifier.verify(h, signed.value)
-    print("Verified:")
-    print('> YES!')
-    results['Header Coverage'] = 'YES'
-    print()
-except (ValueError, TypeError):
-    print("Verified:")
-    print('> NO!')
-    results['Header Coverage'] = 'NO'
-    print()
-
-print(colored('*' * 30, 'blue'))
-
-## full coverage
-print('* Full Coverage')
-print(colored('*' * 30, 'blue'))
-
-components = parse_components(exampleRequestMessage)
-
-components = add_content_digest(components)
-cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
-
-print('Content Digest:')
-print()
-print(str(cd['val']))
-print()
-print(hardwrap(str(cd['val'])))
-print()
-print(hardwrap('Content-Digest: ' + str(cd['val'])))
-print()
-
-siginput = generate_base(
-    components, 
-    ( # covered components list
-        { 'id': "date" },
-        { 'id': "@method" },
-        { 'id': "@path" },
-        { 'id': "@query" },
-        { 'id': "@authority" },
-        { 'id': "content-type" },
-        { 'id': "content-digest" },
-        { 'id': "content-length" }
-    ),
-    {
-        'created': 1618884473,
-        'keyid': 'test-key-rsa-pss'
-    }
-)
-
-base = siginput['signatureInput']
-sigparams = siginput['signatureParams']
-
-print("Base string:")
-print()
-print(base)
-print()
-print(hardwrap(base))
-print()
-print(softwrap(base))
-print()
-print(softwrap('Signature-Input: sig-b23=' + str(sigparams)))
-print()
-
-key = RSA.import_key(PKCS8.unwrap(PEM.decode(rsaTestKeyPssPrivate)[0])[1])
-
-h = SHA512.new(base.encode('utf-8'))
-signer = pss.new(key, mask_func=mgf512, salt_bytes=64)
-
-signed = http_sfv.Item(signer.sign(h))
-
-print("Signed:")
-print(signed)
-print()
-print(hardwrap(str(signed).strip(':'), 0))
-print()
-print(hardwrap('Signature: sig-b23=' + str(signed)))
-print()
-
-pubKey = RSA.import_key(rsaTestKeyPssPublic)
-verifier = pss.new(pubKey, mask_func=mgf512, salt_bytes=64)
-
-try:
-    verified = verifier.verify(h, signed.value)
-    print("Verified:")
-    print('> YES!')
-    results['Full Coverage'] = 'YES'
-    print()
-except (ValueError, TypeError):
-    print("Verified:")
-    print('> NO!')
-    results['Full Coverage'] = 'NO'
-    print()
-
-print(colored('*' * 30, 'blue'))
-
-## ECC
-print('* ECC Response')
-print(colored('*' * 30, 'blue'))
-
-components = parse_components(exampleResponseMessage)
-
-components = add_content_digest(components)
-cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
-
-print('Content Digest:')
-print()
-print(str(cd['val']))
-print()
-print(hardwrap(str(cd['val'])))
-print()
-print(hardwrap('Content-Digest: ' + str(cd['val'])))
-print()
-
-siginput = generate_base(
-    components, 
-    ( # covered components list
-        { 'id': "@status" },
-        { 'id': "content-type" },
-        { 'id': "content-digest" },
-        { 'id': "content-length" }
-    ),
-    {
-        'created': 1618884473,
-        'keyid': 'test-key-ecc-p256'
-    }
-)
-
-base = siginput['signatureInput']
-sigparams = siginput['signatureParams']
-
-print("Base string:")
-print()
-print(base)
-print()
-print(hardwrap(base))
-print()
-print(softwrap(base))
-print()
-print(softwrap('Signature-Input: sig-b24=' + str(sigparams)))
-print()
-
-key = ECC.import_key(eccTestKeyPrivate)
-
-h = SHA256.new(base.encode('utf-8'))
-signer = DSS.new(key, 'fips-186-3')
-
-signed = http_sfv.Item(signer.sign(h))
-
-print("Signed:")
-print()
-print(signed)
-print()
-print(hardwrap(str(signed).strip(':'), 0))
-print()
-print(hardwrap('Signature: sig-b24=' + str(signed)))
-print()
-
-pubKey = ECC.import_key(eccTestKeyPublic)
-verifier = DSS.new(pubKey, 'fips-186-3')
-
-try:
-    verified = verifier.verify(h, signed.value)
-    print("Verified:")
-    print('> YES!')
-    results['ECC Response'] = 'YES'
-    print()
-except (ValueError, TypeError):
-    print("Verified:")
-    print('> NO!')
-    results['ECC Response'] = 'NO'
-    print()
-
-print(colored('*' * 30, 'blue'))
-
-## HMAC coverage
-print('* HMAC Coverage')
-print(colored('*' * 30, 'blue'))
-
-components = parse_components(exampleRequestMessage)
-
-siginput = generate_base(
-    components, 
-    ( # covered components list
-        { 'id': "date" },
-        { 'id': "@authority" },
-        { 'id': "content-type" }
-    ),
-    {
-        'created': 1618884473,
-        'keyid': 'test-shared-secret'
-    }
-)
-
-base = siginput['signatureInput']
-sigparams = siginput['signatureParams']
-
-print("Base string:")
-print()
-print(base)
-print()
-print(hardwrap(base))
-print()
-print(softwrap(base))
-print()
-print(softwrap('Signature-Input: sig-b25=' + str(sigparams)))
-print()
-
-key = base64.b64decode(sharedSecret)
-
-signer = HMAC.new(key, digestmod=SHA256)
-signer.update(base.encode('utf-8'))
-
-signed = http_sfv.Item(signer.digest())
-
-print("Signed:")
-print()
-print(signed)
-print()
-print(hardwrap(str(signed).strip(':'), 0))
-print()
-print(hardwrap('Signature: sig-b25=' + str(signed)))
-print()
-
-results['HMAC'] = 'LOL' # this is silly but ...
-
-print(colored('*' * 30, 'blue'))
-
-## Request-Response
-print('* Request-Response')
-print(colored('*' * 30, 'blue'))
-
-reqComponents = parse_components(exampleReverseProxyMessage)
-reqComponents = add_content_digest(reqComponents)
-
-# Add Signature
-
-siginput = generate_base(
-    reqComponents, 
-    ( # covered components list
-        { 'id': "@method" },
-        { 'id': '@authority' },
-        { 'id': "@path" }, 
-        { 'id': "content-digest" },
-        { 'id': "content-type" },
-        { 'id': "content-length" }
-    ),
-    {
-        'created': 1618884475,
-        'keyid': 'test-key-rsa-pss'
-    }
-)
-
-base = siginput['signatureInput']
-sigparams = siginput['signatureParams']
-
-print("Client Base string:")
-print()
-print(base)
-print()
-print(hardwrap(base))
-print()
-print(softwrap(base))
-print()
-print(softwrap(exampleReverseProxyClientMessage.decode()))
-print()
-print(hardwrap(exampleReverseProxyClientMessage.decode()))
-print()
-print(softwrap('Signature-Input: sig1=' + str(sigparams)))
-print()
-
-key = RSA.import_key(PKCS8.unwrap(PEM.decode(rsaTestKeyPssPrivate)[0])[1])
-
-h = SHA512.new(base.encode('utf-8'))
-signer = pss.new(key, mask_func=mgf512, salt_bytes=64)
-
-signed = http_sfv.Item(signer.sign(h))
-
-print("Client Signed:")
-print()
-print(signed)
-print()
-print(hardwrap(str(signed).strip(':'), 0))
-print()
-print(hardwrap('Signature: sig1=' + str(signed)))
-print()
-
-
-pubKey = RSA.import_key(rsaTestKeyPssPublic)
-verifier = pss.new(pubKey, mask_func=mgf512, salt_bytes=64)
-
-try:
-    verified = verifier.verify(h, signed.value)
-    print("Verified:")
-    print('> YES!')
-    results['Client Req'] = 'YES'
-    print()
-except (ValueError, TypeError):
-    print("Verified:")
-    print('> NO!')
-    results['Client Req'] = 'NO'
-    print()
-
-# Add client signature
-sigfield = http_sfv.Dictionary()
-sigfield['sig1'] = signed
-
-cid = http_sfv.Item('Signature'.lower())
-reqComponents['fields'].append(
-    {
-        'id': cid.value,
-        'cid': str(cid),
-        'val': str(sigfield)
-    }
-)
-cid = http_sfv.Item('Signature'.lower())
-cid.params['key'] = 'sig1'
-reqComponents['fields'].append(
-    {
-        'id': cid.value,
-        'cid': str(cid),
-        'key': 'sig1',
-        'val': str(signed)
-    }
-)
-
-siginputfield = http_sfv.Dictionary()
-sigin = http_sfv.InnerList()
-sigin.parse(sigparams.encode('utf-8')) # we have to re-parse because we're handed the string not the Item
-siginputfield['sig1'] = sigin
-
-cid = http_sfv.Item('Signature-Input'.lower())
-reqComponents['fields'].append(
-    {
-        'id': cid.value,
-        'cid': str(cid),
-        'val': str(siginputfield)
-    }
-)
-cid = http_sfv.Item('Signature-Input'.lower())
-cid.params['key'] = 'sig1'
-reqComponents['fields'].append(
-    {
-        'id': cid.value,
-        'cid': str(cid),
-        'key': 'sig1',
-        'val': str(sigin)
-    }
-)
-
-
-
-
-
-components = parse_components(exampleRequestResponseMessage)
-
-components = add_content_digest(components)
-cd = next((x for x in reqComponents['fields'] if x['id'] == "content-digest"), None)
-
-print('Content Digest:')
-print()
-print(str(cd['val']))
-print()
-print(hardwrap(str(cd['val'])))
-print()
-print(hardwrap('Content-Digest: ' + str(cd['val'])))
-print()
-
-siginput = generate_base(
-    components, 
-    ( # covered components list
-        { 'id': "@status" },
-        { 'id': "content-length" },
-        { 'id': "content-type" },
-        { 'id': "signature", 'key': "sig1", 'req': True },
-        { 'id': "signature-input", 'key': "sig1", 'req': True },
-        { 'id': "@authority", 'req': True },
-        { 'id': "@method", 'req': True }
-    ),
-    {
-        'created': 1618884479,
-        'keyid': 'test-key-ecc-p256'
-    },
-    reqComponents
-)
-
-base = siginput['signatureInput']
-sigparams = siginput['signatureParams']
-
-print("Base string:")
-print()
-print(base)
-print()
-print(hardwrap(base))
-print()
-print(softwrap(base))
-print()
-print(softwrap(exampleReverseProxyMessage.decode()))
-print()
-print(hardwrap(exampleReverseProxyMessage.decode()))
-print()
-print(softwrap(exampleRequestResponseMessage.decode()))
-print()
-print(hardwrap(exampleRequestResponseMessage.decode()))
-print()
-print(softwrap('Signature-Input: reqres=' + str(sigparams)))
-print()
-
-key = ECC.import_key(eccTestKeyPrivate)
-
-h = SHA256.new(base.encode('utf-8'))
-signer = DSS.new(key, 'fips-186-3')
-
-signed = http_sfv.Item(signer.sign(h))
-
-print("Signed:")
-print(signed)
-print()
-print(hardwrap(str(signed).strip(':'), 0))
-print()
-print(hardwrap('Signature: reqres=' + str(signed)))
-print()
-
-pubKey = ECC.import_key(eccTestKeyPublic)
-verifier = DSS.new(pubKey, 'fips-186-3')
-
-try:
-    verified = verifier.verify(h, signed.value)
-    print("Verified:")
-    results['Request Response: Related-Response'] = 'YES'
-    print('> YES!')
-    print()
-except (ValueError, TypeError):
-    print("Verified:")
-    print('> NO!')
-    results['Request Response: Related-Response'] = 'NO'
-    print()
-
-print(colored('*' * 30, 'blue'))
-
-# Static signature test
-
-print('HTTPSig Static Test 1')
-print(colored('*' * 30, 'blue'))
-
-
-components = parse_components(exampleReverseProxyMessage)
-
-components = add_content_digest(components)
-cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
-
-print('Content Digest:')
-print()
-print(str(cd['val']))
-print()
-print(hardwrap(str(cd['val'])))
-print()
-print(hardwrap('Content-Digest: ' + str(cd['val'])))
-print()
-
-siginput = generate_base(
-    components, 
-    ( # covered components list
-        { 'id': "@method" },
-        { 'id': "@authority" },
-        { 'id': "@path" },
-        { 'id': "content-digest"},
-        { 'id': "content-length"},
-        { 'id': "content-type"}
-    ),
-    {
-        'created': 1618884473,
-        'keyid': 'test-key-rsa-pss'
-    }
-)
-
-base = siginput['signatureInput']
-sigparams = siginput['signatureParams']
-
-print("Base string:")
-print()
-print(base)
-print()
-print(hardwrap(base))
-print()
-print(softwrap(base))
-print()
-print(softwrap(exampleReverseProxyMessage.decode()))
-print()
-print(hardwrap(exampleReverseProxyMessage.decode()))
-print()
-print(softwrap('Signature-Input: reqres=' + str(sigparams)))
-print()
-
-h = SHA512.new(base.encode('utf-8'))
-
-signed = http_sfv.Item()
-
-signed.parse(':LAH8BjcfcOcLojiuOBFWn0P5keD3xAOuJRGziCLuD8r5MW9S0RoXXLzLSRfGY/3SF8kVIkHjE13SEFdTo4Af/fJ/Pu9wheqoLVdwXyY/UkBIS1M8Brc8IODsn5DFIrG0IrburbLi0uCc+E2ZIIb6HbUJ+o+jP58JelMTe0QE3IpWINTEzpxjqDf5/Df+InHCAkQCTuKsamjWXUpyOT1Wkxi7YPVNOjW4MfNuTZ9HdbD2Tr65+BXeTG9ZS/9SWuXAc+BZ8WyPz0QRz//ec3uWXd7bYYODSjRAxHqX+S1ag3LZElYyUKaAIjZ8MGOt4gXEwCSLDv/zqxZeWLj/PDkn6w==:'.encode('utf-8'))
-
-pubKey = RSA.import_key(rsaTestKeyPssPublic)
-verifier = pss.new(pubKey, mask_func=mgf512, salt_bytes=64)
-
-try:
-    verified = verifier.verify(h, signed.value)
-    print("Verified:")
-    print('> YES!')
-    results['Static 1'] = 'YES'
-    print()
-except (ValueError, TypeError):
-    print("Verified:")
-    print('> NO!')
-    results['Static 1'] = 'NO'
-    print()
-
-print(colored('*' * 30, 'blue'))
-
-# Static signature test
-
-print('HTTPSig Static Test 3')
-print(colored('*' * 30, 'blue'))
-
-
-base = '''"@method": POST
-"@authority": example.com
-"@path": /foo
-"content-digest": sha-512=:WZDPaVn/7XgHaAy8pmojAkGWoRx2UFChF41A2svX+TaPm+AbwAgBWnrIiYllu7BNNyealdVLvRwEmTHWXvJwew==:
-"content-length": 18
-"content-type": application/json
-"@signature-params": ("@method" "@authority" "@path" "content-digest" "content-length" "content-type");created=1618884473;keyid="test-key-rsa-pss"'''
-
-h = SHA512.new(base.encode('utf-8'))
-
-signed = http_sfv.Item()
-
-signed.parse(':LAH8BjcfcOcLojiuOBFWn0P5keD3xAOuJRGziCLuD8r5MW9S0RoXXLzLSRfGY/3SF8kVIkHjE13SEFdTo4Af/fJ/Pu9wheqoLVdwXyY/UkBIS1M8Brc8IODsn5DFIrG0IrburbLi0uCc+E2ZIIb6HbUJ+o+jP58JelMTe0QE3IpWINTEzpxjqDf5/Df+InHCAkQCTuKsamjWXUpyOT1Wkxi7YPVNOjW4MfNuTZ9HdbD2Tr65+BXeTG9ZS/9SWuXAc+BZ8WyPz0QRz//ec3uWXd7bYYODSjRAxHqX+S1ag3LZElYyUKaAIjZ8MGOt4gXEwCSLDv/zqxZeWLj/PDkn6w==:'.encode('utf-8'))
-
-pubKey = RSA.import_key(rsaTestKeyPssPublic)
-verifier = pss.new(pubKey, mask_func=mgf512, salt_bytes=64)
-
-try:
-    verified = verifier.verify(h, signed.value)
-    print("Verified:")
-    print('> YES!')
-    results['Static 3'] = 'YES'
-    print()
-except (ValueError, TypeError):
-    print("Verified:")
-    print('> NO!')
-    results['Static 3'] = 'NO'
-    print()
-
-print(colored('*' * 30, 'blue'))
-
-## ED 25519
-print('ed25519 signature')
-print(colored('*' * 30, 'blue'))
-
-components = parse_components(exampleRequestMessage)
-
-siginput = generate_base(
-    components, 
-    ( # covered components list
-        { 'id': "date" },
-        { 'id': "@method" },
-        { 'id': "@path" },
-        { 'id': "@authority" },
-        { 'id': "content-type" },
-        { 'id': "content-length" }
-    ),
-    {
-        'created': 1618884473,
-        'keyid': 'test-key-ed25519'
-    }
-)
-
-base = siginput['signatureInput']
-sigparams = siginput['signatureParams']
-
-print("Base string:")
-print()
-print(base)
-print()
-print(hardwrap(base))
-print()
-print(softwrap(base))
-print()
-print(softwrap('Signature-Input: sig-b26=' + str(sigparams)))
-print()
-
-# Unpack private key, format is not supported by Cryptodomex PEM parser
-der = DerOctetString()
-der.decode(PKCS8.unwrap(PEM.decode(ed25519TestKeyPrivate)[0])[1])
-key = SigningKey(der.payload)
-
-h = base.encode('utf-8')
-signed = http_sfv.Item(key.sign(h).signature)
-
-print("Signed:")
-print(signed)
-print()
-print(hardwrap(str(signed).strip(':'), 0))
-print()
-print(hardwrap('Signature: sig-b26=' + str(signed)))
-print()
-
-# Unpack public key, format is not supported by Cryptodomex PEM parser
-
-# sequence of ID and BitString
-ds = DerSequence()
-ds.decode(PEM.decode(ed25519TestKeyPublic)[0])
-bs = DerBitString()
-bs.decode(ds[1])
-# the first byte of the bitstring is "0" for some reason??
-pubKey = VerifyKey(bs.payload[1:])
-
-try:
-    verified = pubKey.verify(h, signed.value)
-    print("Verified:")
-    print('> YES!')
-    results['Ed25519'] = 'YES'
-    print()
-except (ValueError, TypeError):
-    print("Verified:")
-    print('> NO!')
-    results['Ed25519'] = 'NO'
-    print()
-
-print(colored('*' * 30, 'blue'))
-
-# Static HTTP test (ECC)
-print('HTTPSig Static Test 2')
-print(colored('*' * 30, 'blue'))
-
-
-base = '''"@authority": example.com
-"date": Tue, 20 Apr 2021 02:07:55 GMT
-"content-type": application/json
-"@signature-params": ("@authority" "date" "content-type");created=1618884475;keyid="test-key-p256"'''
-
-h = SHA256.new(base.encode('utf-8'))
-
-signed = http_sfv.Item()
-
-signed.parse(':qsAR/kVQiTST/oyJfHust6m1Z6qKTrAF7GKPPtRN7LyasFY3PW8t+0U9Fn9wNeXeZ7MVwZjw2LAxbh8gxT2LYg==:'.encode('utf-8'))
-
-pubKey = ECC.import_key(p256PubKey)
-verifier = DSS.new(pubKey, 'fips-186-3')
-
-try:
-    verified = verifier.verify(h, signed.value)
-    print("Verified:")
-    print('> YES!')
-    results['Static 2'] = 'YES'
-    print()
-except (ValueError, TypeError):
-    print("Verified:")
-    print('> NO!')
-    results['Static 2'] = 'NO'
-    print()
-
-print(colored('*' * 30, 'blue'))
-
-# Static Header formatting
-print('Static header formatting')
-print(colored('*' * 30, 'blue'))
-
-msg = b"""GET / HTTP/1.1
-Host: www.example.com
-Date: Tue, 20 Apr 2021 02:07:56 GMT
-X-OWS-Header:   Leading and trailing whitespace.
-X-Obs-Fold-Header: Obsolete
-    line folding.
-Cache-Control: max-age=60
-Cache-Control:    must-revalidate
-Example-Dict:  a=1,    b=2;x=1;y=2,   c=(a   b   c)
-"""
-
-components = parse_components(msg)
-
-siginput = generate_base(
-    components, 
-    ( # covered components list
-        { 'id': "host" },
-        { 'id': "date" },
-        { 'id': "x-ows-header" },
-        { 'id': "x-obs-fold-header" },
-        { 'id': "cache-control" },
-        { 'id': "example-dict" },
-        { 'id': "example-dict", 'sf': True },
-        { 'id': "example-dict", 'key': 'a' },
-        { 'id': "example-dict", 'key': 'b' },
-        { 'id': "example-dict", 'key': 'c' }
-    ),
-    {
-    }
-)
-
-base = siginput['signatureInput']
-sigparams = siginput['signatureParams']
-
-print("Base string:")
-print()
-print(base)
-print()
-print(hardwrap(base))
-print()
-print(softwrap(base))
-print()
-
-
-print(colored('*' * 30, 'blue'))
-
-
-## Transformed Messages
-print('Transformed Messages')
-print(colored('*' * 30, 'blue'))
-
-print('Original message:')
-print()
-print(softwrap(exampleGetRequest1.decode()))
-print()
-
-components = parse_components(exampleGetRequest1)
-
-siginput = generate_base(
-    components, 
-    ( # covered components list
-        { 'id': "@method" },
-        { 'id': "@path" },
-        { 'id': "@authority" },
-        { 'id': "accept" }
-    ),
-    {
-        'created': 1618884473,
-        'keyid': 'test-key-ed25519'
-    }
-)
-
-base = siginput['signatureInput']
-sigparams = siginput['signatureParams']
-
-print("Base string:")
-print()
-print(base)
-print()
-print(hardwrap(base))
-print()
-print(softwrap(base))
-print()
-print(softwrap('Signature-Input: transform=' + str(sigparams)))
-print()
-
-# Unpack private key, format is not supported by Cryptodomex PEM parser
-der = DerOctetString()
-der.decode(PKCS8.unwrap(PEM.decode(ed25519TestKeyPrivate)[0])[1])
-key = SigningKey(der.payload)
-
-h = base.encode('utf-8')
-signed = http_sfv.Item(key.sign(h).signature)
-
-print("Signed:")
-print(signed)
-print()
-print(hardwrap(str(signed).strip(':'), 0))
-print()
-print(hardwrap('Signature: transform=' + str(signed)))
-print()
-
-# Unpack public key, format is not supported by Cryptodomex PEM parser
-
-# sequence of ID and BitString
-ds = DerSequence()
-ds.decode(PEM.decode(ed25519TestKeyPublic)[0])
-bs = DerBitString()
-bs.decode(ds[1])
-# the first byte of the bitstring is "0" for some reason??
-pubKey = VerifyKey(bs.payload[1:])
-
-try:
-    verified = pubKey.verify(h, signed.value)
-    print("Verified:")
-    print('> YES!')
-    results['transform1'] = 'YES'
-    print()
-except (ValueError, TypeError):
-    print("Verified:")
-    print('> NO!')
-    results['transform1'] = 'NO'
-    print()
-
-
-## now test other messages
-print('Alternate message 2:')
-print()
-print(softwrap(exampleGetRequest2.decode()))
-print()
-
-components = parse_components(exampleGetRequest2)
-
-siginput = generate_base(
-    components, 
-    ( # covered components list
-        { 'id': "@method" },
-        { 'id': "@path" },
-        { 'id': "@authority" },
-        { 'id': "accept" }
-    ),
-    {
-        'created': 1618884473,
-        'keyid': 'test-key-ed25519'
-    }
-)
-
-base = siginput['signatureInput']
-h = base.encode('utf-8')
-
-try:
-    verified = pubKey.verify(h, signed.value)
-    print("Verified:")
-    print('> YES!')
-    results['transform2'] = 'YES'
-    print()
-except (ValueError, TypeError):
-    print("Verified:")
-    print('> NO!')
-    results['transform2'] = 'NO'
-    print()
-
-print('Alternate message 3:')
-print()
-print(softwrap(exampleGetRequest3.decode()))
-print()
-
-components = parse_components(exampleGetRequest3)
-
-siginput = generate_base(
-    components, 
-    ( # covered components list
-        { 'id': "@method" },
-        { 'id': "@path" },
-        { 'id': "@authority" },
-        { 'id': "accept" }
-    ),
-    {
-        'created': 1618884473,
-        'keyid': 'test-key-ed25519'
-    }
-)
-
-base = siginput['signatureInput']
-h = base.encode('utf-8')
-
-try:
-    verified = pubKey.verify(h, signed.value)
-    print("Verified:")
-    print('> YES!')
-    results['transform3'] = 'YES'
-    print()
-except (ValueError, TypeError):
-    print("Verified:")
-    print('> NO!')
-    results['transform3'] = 'NO'
-    print()
-
-print('Alternate message 4:')
-print()
-print(softwrap(exampleGetRequest4.decode()))
-print()
-
-components = parse_components(exampleGetRequest4)
-
-siginput = generate_base(
-    components, 
-    ( # covered components list
-        { 'id': "@method" },
-        { 'id': "@path" },
-        { 'id': "@authority" },
-        { 'id': "accept" }
-    ),
-    {
-        'created': 1618884473,
-        'keyid': 'test-key-ed25519'
-    }
-)
-
-base = siginput['signatureInput']
-h = base.encode('utf-8')
-
-try:
-    verified = pubKey.verify(h, signed.value)
-    print("Verified:")
-    print('> YES!')
-    results['transform4'] = 'YES'
-    print()
-except (ValueError, TypeError):
-    print("Verified:")
-    print('> NO!')
-    results['transform4'] = 'NO'
-    print()
-
-print('Alternate message Bad 1:')
-print()
-print(softwrap(exampleGetRequest_bad1.decode()))
-print()
-
-components = parse_components(exampleGetRequest_bad1)
-
-siginput = generate_base(
-    components, 
-    ( # covered components list
-        { 'id': "@method" },
-        { 'id': "@path" },
-        { 'id': "@authority" },
-        { 'id': "accept" }
-    ),
-    {
-        'created': 1618884473,
-        'keyid': 'test-key-ed25519'
-    }
-)
-
-base = siginput['signatureInput']
-h = base.encode('utf-8')
-
-try:
-    verified = pubKey.verify(h, signed.value)
-    print("Failed:")
-    print('> NO!')
-    results['transform bad1'] = 'NO' # this is supposed to fail
-    print()
-except (ValueError, TypeError, BadSignatureError):
-    print("Failed:")
-    print('> YES!')
-    results['transform bad1'] = 'YES' # this is supposed to fail
-    print()
-
-print('Alternate message Bad 2:')
-print()
-print(softwrap(exampleGetRequest_bad2.decode()))
-print()
-
-components = parse_components(exampleGetRequest_bad2)
-
-siginput = generate_base(
-    components, 
-    ( # covered components list
-        { 'id': "@method" },
-        { 'id': "@path" },
-        { 'id': "@authority" },
-        { 'id': "accept" }
-    ),
-    {
-        'created': 1618884473,
-        'keyid': 'test-key-ed25519'
-    }
-)
-
-base = siginput['signatureInput']
-h = base.encode('utf-8')
-
-try:
-    verified = pubKey.verify(h, signed.value)
-    print("Failed:")
-    print('> NO!')
-    results['transform bad2'] = 'NO' # this is supposed to fail
-    print()
-except (ValueError, TypeError, BadSignatureError):
-    print("Failed:")
-    print('> YES!')
-    results['transform bad2'] = 'YES' # this is supposed to fail
-    print()
-
-
-print(colored('*' * 30, 'blue'))
-
-
-
-
-
-print(colored('*' * 30, 'blue'))
+print(colored('*' * 30, 'magenta'))
 
 
 print()
