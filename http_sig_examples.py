@@ -57,7 +57,9 @@ targets = [
     'reqres',
     'ed25519',
     'transform',
-    'static'
+    'static',
+    'queryparam',
+    'format'
 ]
 
 if not args.target:
@@ -209,7 +211,7 @@ Host: origin.host.internal.example
 Date: Tue, 20 Apr 2021 02:07:56 GMT
 Content-Type: application/json
 Content-Length: 18
-Forwarded: for=192.0.2.123
+Forwarded: for=192.0.2.123;host=example.com;proto=https
 
 {"hello": "world"}
 """
@@ -410,12 +412,12 @@ if 'rsapss' in args.target:
     try:
         verified = verifier.verify(h, signed.value)
         print("Verified:")
-        print('> YES!')
+        print(colored('> YES!', 'green'))
         results['Covered Content RSAPSS Test'] = 'YES'
         print()
     except (ValueError, TypeError):
         print("Verified:")
-        print('> NO!')
+        print(colored('> NO!', 'red'))
         results['Covered Content RSAPSS Test'] = 'NO'
         print()
 
@@ -502,17 +504,18 @@ if 'revproxy' in args.target:
     try:
         verified = verifier.verify(h, signed.value)
         print("Verified:")
-        print('> YES!')
+        print(colored('> YES!', 'green'))
         results['Client Proxy'] = 'YES'
         print()
     except (ValueError, TypeError):
         print("Verified:")
-        print('> NO!')
+        print(colored('> NO!', 'red'))
         results['Client Proxy'] = 'NO'
         print()
 
 
     components = parse_components(exampleReverseProxyMessage)
+    components = add_content_digest(components)
 
     # Add client signature
     sigfield = http_sfv.Dictionary()
@@ -564,11 +567,12 @@ if 'revproxy' in args.target:
     siginput = generate_base(
         components, 
         ( # covered components list
-            { 'id': "signature", 'key': 'sig1' }, 
-            { 'id': "signature-input", 'key': 'sig1' }, 
-            { 'id': "@authority" },
             { 'id': "@method" },
-            { 'id': "@path" },
+            { 'id': '@authority' },
+            { 'id': "@path" }, 
+            { 'id': "content-digest" },
+            { 'id': "content-type" },
+            { 'id': "content-length" },
             { 'id': "forwarded" }
         ),
         {
@@ -625,12 +629,12 @@ if 'revproxy' in args.target:
     try:
         verified = verifier.verify(h, signed.value)
         print("Verified:")
-        print('> YES!')
+        print(colored('> YES!', 'green'))
         results['Reverse Proxy'] = 'YES'
         print()
     except (ValueError, TypeError):
         print("Verified:")
-        print('> NO!')
+        print(colored('> NO!', 'red'))
         results['Reverse Proxy'] = 'NO'
         print()
 
@@ -700,12 +704,12 @@ if 'ttrp' in args.target:
     try:
         verified = verifier.verify(h, signed.value)
         print("Verified:")
-        print('> YES!')
+        print(colored('> YES!', 'green'))
         results['TTRP'] = 'YES'
         print()
     except (ValueError, TypeError):
         print("Verified:")
-        print('> NO!')
+        print(colored('> NO!', 'red'))
         results['TTRP'] = 'NO'
         print()
 
@@ -767,12 +771,12 @@ if 'min' in args.target:
     try:
         verified = verifier.verify(h, signed.value)
         print("Verified:")
-        print('> YES!')
+        print(colored('> YES!', 'green'))
         results['Minimal Coverage'] = 'YES'
         print()
     except (ValueError, TypeError):
         print("Verified:")
-        print('> NO!')
+        print(colored('> NO!', 'red'))
         results['TLSMinimal Coverage'] = 'NO'
         print()
 
@@ -847,12 +851,12 @@ if 'header' in args.target:
     try:
         verified = verifier.verify(h, signed.value)
         print("Verified:")
-        print('> YES!')
+        print(colored('> YES!', 'green'))
         results['Header Coverage'] = 'YES'
         print()
     except (ValueError, TypeError):
         print("Verified:")
-        print('> NO!')
+        print(colored('> NO!', 'red'))
         results['Header Coverage'] = 'NO'
         print()
 
@@ -930,12 +934,12 @@ if 'full' in args.target:
     try:
         verified = verifier.verify(h, signed.value)
         print("Verified:")
-        print('> YES!')
+        print(colored('> YES!', 'green'))
         results['Full Coverage'] = 'YES'
         print()
     except (ValueError, TypeError):
         print("Verified:")
-        print('> NO!')
+        print(colored('> NO!', 'red'))
         results['Full Coverage'] = 'NO'
         print()
 
@@ -1010,12 +1014,12 @@ if 'eccres' in args.target:
     try:
         verified = verifier.verify(h, signed.value)
         print("Verified:")
-        print('> YES!')
+        print(colored('> YES!', 'green'))
         results['ECC Response'] = 'YES'
         print()
     except (ValueError, TypeError):
         print("Verified:")
-        print('> NO!')
+        print(colored('> NO!', 'red'))
         results['ECC Response'] = 'NO'
         print()
 
@@ -1082,132 +1086,24 @@ if 'reqres' in args.target:
 
     reqComponents = parse_components(exampleReverseProxyMessage)
     reqComponents = add_content_digest(reqComponents)
+    rcd = next((x for x in reqComponents['fields'] if x['id'] == "content-digest"), None)
 
-    # Add Signature
-
-    siginput = generate_base(
-        reqComponents, 
-        ( # covered components list
-            { 'id': "@method" },
-            { 'id': '@authority' },
-            { 'id': "@path" }, 
-            { 'id': "content-digest" },
-            { 'id': "content-type" },
-            { 'id': "content-length" }
-        ),
-        {
-            'created': 1618884475,
-            'keyid': 'test-key-rsa-pss'
-        }
-    )
-
-    base = siginput['signatureInput']
-    sigparams = siginput['signatureParams']
-
-    print("Client Base string:")
+    print('Request Content Digest:')
     print()
-    print(base)
+    print(str(rcd['val']))
     print()
-    print(hardwrap(base))
+    print(hardwrap(str(rcd['val'])))
     print()
-    print(softwrap(base))
+    print(hardwrap('Content-Digest: ' + str(rcd['val'])))
     print()
-    print(softwrap(exampleReverseProxyClientMessage.decode()))
-    print()
-    print(hardwrap(exampleReverseProxyClientMessage.decode()))
-    print()
-    print(softwrap('Signature-Input: sig1=' + str(sigparams)))
-    print()
-
-    key = RSA.import_key(PKCS8.unwrap(PEM.decode(rsaTestKeyPssPrivate)[0])[1])
-
-    h = SHA512.new(base.encode('utf-8'))
-    signer = pss.new(key, mask_func=mgf512, salt_bytes=64)
-
-    signed = http_sfv.Item(signer.sign(h))
-
-    print("Client Signed:")
-    print()
-    print(signed)
-    print()
-    print(hardwrap(str(signed).strip(':'), 0))
-    print()
-    print(hardwrap('Signature: sig1=' + str(signed)))
-    print()
-
-
-    pubKey = RSA.import_key(rsaTestKeyPssPublic)
-    verifier = pss.new(pubKey, mask_func=mgf512, salt_bytes=64)
-
-    try:
-        verified = verifier.verify(h, signed.value)
-        print("Verified:")
-        print('> YES!')
-        results['Client Req'] = 'YES'
-        print()
-    except (ValueError, TypeError):
-        print("Verified:")
-        print('> NO!')
-        results['Client Req'] = 'NO'
-        print()
-
-    # Add client signature
-    sigfield = http_sfv.Dictionary()
-    sigfield['sig1'] = signed
-
-    cid = http_sfv.Item('Signature'.lower())
-    reqComponents['fields'].append(
-        {
-            'id': cid.value,
-            'cid': str(cid),
-            'val': str(sigfield)
-        }
-    )
-    cid = http_sfv.Item('Signature'.lower())
-    cid.params['key'] = 'sig1'
-    reqComponents['fields'].append(
-        {
-            'id': cid.value,
-            'cid': str(cid),
-            'key': 'sig1',
-            'val': str(signed)
-        }
-    )
-
-    siginputfield = http_sfv.Dictionary()
-    sigin = http_sfv.InnerList()
-    sigin.parse(sigparams.encode('utf-8')) # we have to re-parse because we're handed the string not the Item
-    siginputfield['sig1'] = sigin
-
-    cid = http_sfv.Item('Signature-Input'.lower())
-    reqComponents['fields'].append(
-        {
-            'id': cid.value,
-            'cid': str(cid),
-            'val': str(siginputfield)
-        }
-    )
-    cid = http_sfv.Item('Signature-Input'.lower())
-    cid.params['key'] = 'sig1'
-    reqComponents['fields'].append(
-        {
-            'id': cid.value,
-            'cid': str(cid),
-            'key': 'sig1',
-            'val': str(sigin)
-        }
-    )
-
-
-
-
-
+    # base response
+    
     components = parse_components(exampleRequestResponseMessage)
 
     components = add_content_digest(components)
-    cd = next((x for x in reqComponents['fields'] if x['id'] == "content-digest"), None)
+    cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
 
-    print('Content Digest:')
+    print('Response Content Digest:')
     print()
     print(str(cd['val']))
     print()
@@ -1220,12 +1116,12 @@ if 'reqres' in args.target:
         components, 
         ( # covered components list
             { 'id': "@status" },
-            { 'id': "content-length" },
+            { 'id': "content-digest" },
             { 'id': "content-type" },
-            { 'id': "signature", 'key': "sig1", 'req': True },
-            { 'id': "signature-input", 'key': "sig1", 'req': True },
             { 'id': "@authority", 'req': True },
-            { 'id': "@method", 'req': True }
+            { 'id': "@method", 'req': True },
+            { 'id': "@path", 'req': True },
+            { 'id': "content-digest", 'req': True}
         ),
         {
             'created': 1618884479,
@@ -1278,12 +1174,206 @@ if 'reqres' in args.target:
         verified = verifier.verify(h, signed.value)
         print("Verified:")
         results['Request Response: Related-Response'] = 'YES'
-        print('> YES!')
+        print(colored('> YES!', 'green'))
         print()
     except (ValueError, TypeError):
         print("Verified:")
-        print('> NO!')
+        print(colored('> NO!', 'red'))
         results['Request Response: Related-Response'] = 'NO'
+        print()
+
+
+
+    # Add Signature to client message
+
+    siginput = generate_base(
+        reqComponents, 
+        ( # covered components list
+            { 'id': "@method" },
+            { 'id': '@authority' },
+            { 'id': "@path" }, 
+            { 'id': "@query" },
+            { 'id': "content-digest" },
+            { 'id': "content-type" },
+            { 'id': "content-length" }
+        ),
+        {
+            'created': 1618884475,
+            'keyid': 'test-key-rsa-pss'
+        }
+    )
+
+    base = siginput['signatureInput']
+    sigparams = siginput['signatureParams']
+
+    print("Client Base string:")
+    print()
+    print(base)
+    print()
+    print(hardwrap(base))
+    print()
+    print(softwrap(base))
+    print()
+    print(softwrap(exampleReverseProxyClientMessage.decode()))
+    print()
+    print(hardwrap(exampleReverseProxyClientMessage.decode()))
+    print()
+    print(softwrap('Signature-Input: sig1=' + str(sigparams)))
+    print()
+
+    key = RSA.import_key(PKCS8.unwrap(PEM.decode(rsaTestKeyPssPrivate)[0])[1])
+
+    h = SHA512.new(base.encode('utf-8'))
+    signer = pss.new(key, mask_func=mgf512, salt_bytes=64)
+
+    signed = http_sfv.Item(signer.sign(h))
+
+    print("Client Signed:")
+    print()
+    print(signed)
+    print()
+    print(hardwrap(str(signed).strip(':'), 0))
+    print()
+    print(hardwrap('Signature: sig1=' + str(signed)))
+    print()
+
+
+    pubKey = RSA.import_key(rsaTestKeyPssPublic)
+    verifier = pss.new(pubKey, mask_func=mgf512, salt_bytes=64)
+
+    try:
+        verified = verifier.verify(h, signed.value)
+        print("Verified:")
+        print(colored('> YES!', 'green'))
+        results['Client Req'] = 'YES'
+        print()
+    except (ValueError, TypeError):
+        print("Verified:")
+        print(colored('> NO!', 'red'))
+        results['Client Req'] = 'NO'
+        print()
+
+    # Add client signature
+    sigfield = http_sfv.Dictionary()
+    sigfield['sig1'] = signed
+
+    cid = http_sfv.Item('Signature'.lower())
+    reqComponents['fields'].append(
+        {
+            'id': cid.value,
+            'cid': str(cid),
+            'val': str(sigfield)
+        }
+    )
+    cid = http_sfv.Item('Signature'.lower())
+    cid.params['key'] = 'sig1'
+    reqComponents['fields'].append(
+        {
+            'id': cid.value,
+            'cid': str(cid),
+            'key': 'sig1',
+            'val': str(signed)
+        }
+    )
+
+    siginputfield = http_sfv.Dictionary()
+    sigin = http_sfv.InnerList()
+    sigin.parse(sigparams.encode('utf-8')) # we have to re-parse because we're handed the string not the Item
+    siginputfield['sig1'] = sigin
+
+    cid = http_sfv.Item('Signature-Input'.lower())
+    reqComponents['fields'].append(
+        {
+            'id': cid.value,
+            'cid': str(cid),
+            'val': str(siginputfield)
+        }
+    )
+    cid = http_sfv.Item('Signature-Input'.lower())
+    cid.params['key'] = 'sig1'
+    reqComponents['fields'].append(
+        {
+            'id': cid.value,
+            'cid': str(cid),
+            'key': 'sig1',
+            'val': str(sigin)
+        }
+    )
+
+
+    # sign request-response
+    
+    siginput = generate_base(
+        components, 
+        ( # covered components list
+            { 'id': "@status" },
+            { 'id': "content-digest" },
+            { 'id': "content-type" },
+            { 'id': "@authority", 'req': True },
+            { 'id': "@method", 'req': True },
+            { 'id': "@path", 'req': True },
+            { 'id': "@query", 'req': True },
+            { 'id': "content-digest", 'req': True},
+            { 'id': "content-type", 'req': True},
+            { 'id': "content-length", 'req': True}
+        ),
+        {
+            'created': 1618884479,
+            'keyid': 'test-key-ecc-p256'
+        },
+        reqComponents
+    )
+
+    base = siginput['signatureInput']
+    sigparams = siginput['signatureParams']
+
+    print("Base string:")
+    print()
+    print(base)
+    print()
+    print(hardwrap(base))
+    print()
+    print(softwrap(base))
+    print()
+    print(softwrap(exampleReverseProxyMessage.decode()))
+    print()
+    print(hardwrap(exampleReverseProxyMessage.decode()))
+    print()
+    print(softwrap(exampleRequestResponseMessage.decode()))
+    print()
+    print(hardwrap(exampleRequestResponseMessage.decode()))
+    print()
+    print(softwrap('Signature-Input: reqres=' + str(sigparams)))
+    print()
+
+    key = ECC.import_key(eccTestKeyPrivate)
+
+    h = SHA256.new(base.encode('utf-8'))
+    signer = DSS.new(key, 'fips-186-3')
+
+    signed = http_sfv.Item(signer.sign(h))
+
+    print("Signed:")
+    print(signed)
+    print()
+    print(hardwrap(str(signed).strip(':'), 0))
+    print()
+    print(hardwrap('Signature: reqres=' + str(signed)))
+    print()
+
+    pubKey = ECC.import_key(eccTestKeyPublic)
+    verifier = DSS.new(pubKey, 'fips-186-3')
+
+    try:
+        verified = verifier.verify(h, signed.value)
+        print("Verified:")
+        results['Signed Res to Signed Req'] = 'YES'
+        print(colored('> YES!', 'green'))
+        print()
+    except (ValueError, TypeError):
+        print("Verified:")
+        print(colored('> NO!', 'red'))
+        results['Signed Res to Signed Req'] = 'NO'
         print()
 
 if 'static' in args.target:
@@ -1356,12 +1446,12 @@ if 'static' in args.target:
     try:
         verified = verifier.verify(h, signed.value)
         print("Verified:")
-        print('> YES!')
+        print(colored('> YES!', 'green'))
         results['Static 1'] = 'YES'
         print()
     except (ValueError, TypeError):
         print("Verified:")
-        print('> NO!')
+        print(colored('> NO!', 'red'))
         results['Static 1'] = 'NO'
         print()
 
@@ -1394,12 +1484,12 @@ if 'static' in args.target:
     try:
         verified = verifier.verify(h, signed.value)
         print("Verified:")
-        print('> YES!')
+        print(colored('> YES!', 'green'))
         results['Static 3'] = 'YES'
         print()
     except (ValueError, TypeError):
         print("Verified:")
-        print('> NO!')
+        print(colored('> NO!', 'red'))
         results['Static 3'] = 'NO'
         print()
 
@@ -1470,12 +1560,12 @@ if 'static' in args.target:
     try:
         verified = pubKey.verify(h, signed.value)
         print("Verified:")
-        print('> YES!')
+        print(colored('> YES!', 'green'))
         results['Ed25519'] = 'YES'
         print()
     except (ValueError, TypeError):
         print("Verified:")
-        print('> NO!')
+        print(colored('> NO!', 'red'))
         results['Ed25519'] = 'NO'
         print()
 
@@ -1503,12 +1593,12 @@ if 'static' in args.target:
     try:
         verified = verifier.verify(h, signed.value)
         print("Verified:")
-        print('> YES!')
+        print(colored('> YES!', 'green'))
         results['Static 2'] = 'YES'
         print()
     except (ValueError, TypeError):
         print("Verified:")
-        print('> NO!')
+        print(colored('> NO!', 'red'))
         results['Static 2'] = 'NO'
         print()
 
@@ -1520,15 +1610,15 @@ if 'format' in args.target:
     print(colored('*' * 30, 'blue'))
 
     msg = b"""GET / HTTP/1.1
-    Host: www.example.com
-    Date: Tue, 20 Apr 2021 02:07:56 GMT
-    X-OWS-Header:   Leading and trailing whitespace.
-    X-Obs-Fold-Header: Obsolete
-        line folding.
-    Cache-Control: max-age=60
-    Cache-Control:    must-revalidate
-    Example-Dict:  a=1,    b=2;x=1;y=2,   c=(a   b   c)
-    """
+Host: www.example.com
+Date: Tue, 20 Apr 2021 02:07:56 GMT
+X-OWS-Header:   Leading and trailing whitespace.
+X-Obs-Fold-Header: Obsolete
+    line folding.
+Cache-Control: max-age=60
+Cache-Control:    must-revalidate
+Example-Dict:  a=1,    b=2;x=1;y=2,   c=(a   b   c)
+"""
 
     components = parse_components(msg)
 
@@ -1545,6 +1635,54 @@ if 'format' in args.target:
             { 'id': "example-dict", 'key': 'a' },
             { 'id': "example-dict", 'key': 'b' },
             { 'id': "example-dict", 'key': 'c' }
+        ),
+        {
+        }
+    )
+
+    base = siginput['signatureInput']
+    sigparams = siginput['signatureParams']
+
+    print("Base string:")
+    print()
+    print(base)
+    print()
+    print(hardwrap(base))
+    print()
+    print(softwrap(base))
+    print()
+
+if 'queryparam' in args.target:
+    print(colored('*' * 30, 'blue'))
+
+    # Static Header formatting
+    print(colored('*', 'blue') + ' Static header formatting')
+    print(colored('*' * 30, 'blue'))
+
+    msg = b"""GET /parameters?var=this%20is%20a%20big%0Amultiline%20value&bar=with+plus+whitespace&fa%C3%A7ade%22%3A%20=something HTTP/1.1
+Host: www.example.com
+Date: Tue, 20 Apr 2021 02:07:56 GMT
+"""
+
+    print("Message:")
+    print()
+    print(msg.decode('utf-8'))
+    print()
+    print(hardwrap(msg.decode('utf-8')))
+    print()
+    print(softwrap(msg.decode('utf-8')))
+    print()
+
+    components = parse_components(msg)
+    
+    #print(json.dumps(components, indent=4))
+
+    siginput = generate_base(
+        components, 
+        ( # covered components list
+            { 'id': "@query-param", 'name': 'var' },
+            { 'id': "@query-param", 'name': 'bar' },
+            { 'id': "@query-param", 'name': 'fa%C3%A7ade%22%3A%20' },
         ),
         {
         }
@@ -1634,12 +1772,12 @@ if 'transform' in args.target:
     try:
         verified = pubKey.verify(h, signed.value)
         print("Verified:")
-        print('> YES!')
+        print(colored('> YES!', 'green'))
         results['transform1'] = 'YES'
         print()
     except (ValueError, TypeError):
         print("Verified:")
-        print('> NO!')
+        print(colored('> NO!', 'red'))
         results['transform1'] = 'NO'
         print()
 
@@ -1672,12 +1810,12 @@ if 'transform' in args.target:
     try:
         verified = pubKey.verify(h, signed.value)
         print("Verified:")
-        print('> YES!')
+        print(colored('> YES!', 'green'))
         results['transform2'] = 'YES'
         print()
     except (ValueError, TypeError):
         print("Verified:")
-        print('> NO!')
+        print(colored('> NO!', 'red'))
         results['transform2'] = 'NO'
         print()
 
@@ -1708,12 +1846,12 @@ if 'transform' in args.target:
     try:
         verified = pubKey.verify(h, signed.value)
         print("Verified:")
-        print('> YES!')
+        print(colored('> YES!', 'green'))
         results['transform3'] = 'YES'
         print()
     except (ValueError, TypeError):
         print("Verified:")
-        print('> NO!')
+        print(colored('> NO!', 'red'))
         results['transform3'] = 'NO'
         print()
 
@@ -1744,12 +1882,12 @@ if 'transform' in args.target:
     try:
         verified = pubKey.verify(h, signed.value)
         print("Verified:")
-        print('> YES!')
+        print(colored('> YES!', 'green'))
         results['transform4'] = 'YES'
         print()
     except (ValueError, TypeError):
         print("Verified:")
-        print('> NO!')
+        print(colored('> NO!', 'red'))
         results['transform4'] = 'NO'
         print()
 
@@ -1780,12 +1918,12 @@ if 'transform' in args.target:
     try:
         verified = pubKey.verify(h, signed.value)
         print("Failed:")
-        print('> NO!')
+        print(colored('> NO!', 'red'))
         results['transform bad1'] = 'NO' # this is supposed to fail
         print()
     except (ValueError, TypeError, BadSignatureError):
         print("Failed:")
-        print('> YES!')
+        print(colored('> YES!', 'green'))
         results['transform bad1'] = 'YES' # this is supposed to fail
         print()
 
@@ -1816,22 +1954,17 @@ if 'transform' in args.target:
     try:
         verified = pubKey.verify(h, signed.value)
         print("Failed:")
-        print('> NO!')
+        print(colored('> NO!', 'red'))
         results['transform bad2'] = 'NO' # this is supposed to fail
         print()
     except (ValueError, TypeError, BadSignatureError):
         print("Failed:")
-        print('> YES!')
+        print(colored('> YES!', 'green'))
         results['transform bad2'] = 'YES' # this is supposed to fail
         print()
 
 
-print(colored('*' * 30, 'blue'))
-
-
-
-
-
+print(colored('*' * 30, 'magenta'))
 print(colored('*' * 30, 'magenta'))
 
 
