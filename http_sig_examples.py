@@ -59,7 +59,10 @@ targets = [
     'transform',
     'static',
     'queryparam',
-    'format'
+    'format',
+    'gnap',
+    'httpsigorgreq',
+    'httpsigorgres'
 ]
 
 if not args.target:
@@ -232,6 +235,16 @@ Content-Type: application/json
 Content-Length: 23
 
 {"message": "good dog"}"""
+
+exampleRequestRequestMessage = b"""
+POST /foo?param=Value&Pet=dog HTTP/1.1
+Host: example.com
+Date: Tue, 20 Apr 2021 02:07:55 GMT
+Content-Type: application/json
+Content-Length: 18
+
+{"hello": "world"}
+"""
 
 exampleRequestResponseMessage = b"""HTTP/1.1 503 Service Unavailable
 Date: Tue, 20 Apr 2021 02:07:56 GMT
@@ -420,6 +433,272 @@ if 'rsapss' in args.target:
         print(colored('> NO!', 'red'))
         results['Covered Content RSAPSS Test'] = 'NO'
         print()
+
+
+if 'httpsigorgreq' in args.target:
+    ## Base example pieces
+
+    print(colored('*' * 30, 'blue'))
+    print(colored('*', 'blue') + ' Covered Content RSAPSS Test')
+    print(colored('*' * 30, 'blue'))
+
+
+    msg = b"""POST /foo?param=value&pet=dog HTTP/1.1
+Host: example.com
+Date: Tue, 20 Apr 2021 02:07:55 GMT
+Content-Type: application/json
+Content-Length: 18
+
+{"hello": "world"}"""
+
+    components = parse_components(msg)
+
+    components = add_content_digest(components)
+    cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
+
+    print("Content Digest:")
+    print()
+    print(str(cd['val']))
+    print()
+    print(hardwrap(str(cd['val'])))
+    print()
+    print(hardwrap('Content-Digest: ' + str(cd['val'])))
+    print()
+
+    siginput = generate_base(
+        components, 
+        ( # covered components list
+            { 'id': "@method" }, 
+            { 'id': "@authority" },
+            { 'id': "@path" },
+            { 'id': "@query" },
+            { 'id': "content-digest" },
+            { 'id': "content-length" },
+            { 'id': "content-type" }
+        ),
+        {
+            'alg': 'rsa-pss-sha512',
+            'created': 1618884473,
+            'keyid': 'RSA (X.509 preloaded)'
+        }
+    )
+
+    base = siginput['signatureInput']
+    sigparams = siginput['signatureParams']
+
+    print("Base string:")
+    print()
+    print(base)
+    print()
+    print(hardwrap(base))
+    print()
+    print(softwrap(base))
+    print()
+    print(softwrap('Signature-Input: sig=' + str(sigparams)))
+    print()
+
+    rawKey = """-----BEGIN PRIVATE KEY-----
+MIIEvgIBADALBgkqhkiG9w0BAQoEggSqMIIEpgIBAAKCAQEAr4tmm3r20Wd/Pbqv
+P1s2+QEtvpuRaV8Yq40gjUR8y2Rjxa6dpG2GXHbPfvMs8ct+Lh1GH45x28Rw3Ry5
+3mm+oAXjyQ86OnDkZ5N8lYbggD4O3w6M6pAvLkhk95AndTrifbIFPNU8PPMO7Oyr
+FAHqgDsznjPFmTOtCEcN2Z1FpWgchwuYLPL+Wokqltd11nqqzi+bJ9cvSKADYdUA
+AN5WUtzdpiy6LbTgSxP7ociU4Tn0g5I6aDZJ7A8Lzo0KSyZYoA485mqcO0GVAdVw
+9lq4aOT9v6d+nb4bnNkQVklLQ3fVAvJm+xdDOp9LCNCN48V2pnDOkFV6+U9nV5oy
+c6XI2wIDAQABAoIBAQCUB8ip+kJiiZVKF8AqfB/aUP0jTAqOQewK1kKJ/iQCXBCq
+pbo360gvdt05H5VZ/RDVkEgO2k73VSsbulqezKs8RFs2tEmU+JgTI9MeQJPWcP6X
+aKy6LIYs0E2cWgp8GADgoBs8llBq0UhX0KffglIeek3n7Z6Gt4YFge2TAcW2WbN4
+XfK7lupFyo6HHyWRiYHMMARQXLJeOSdTn5aMBP0PO4bQyk5ORxTUSeOciPJUFktQ
+HkvGbym7KryEfwH8Tks0L7WhzyP60PL3xS9FNOJi9m+zztwYIXGDQuKM2GDsITeD
+2mI2oHoPMyAD0wdI7BwSVW18p1h+jgfc4dlexKYRAoGBAOVfuiEiOchGghV5vn5N
+RDNscAFnpHj1QgMr6/UG05RTgmcLfVsI1I4bSkbrIuVKviGGf7atlkROALOG/xRx
+DLadgBEeNyHL5lz6ihQaFJLVQ0u3U4SB67J0YtVO3R6lXcIjBDHuY8SjYJ7Ci6Z6
+vuDcoaEujnlrtUhaMxvSfcUJAoGBAMPsCHXte1uWNAqYad2WdLjPDlKtQJK1diCm
+rqmB2g8QE99hDOHItjDBEdpyFBKOIP+NpVtM2KLhRajjcL9Ph8jrID6XUqikQuVi
+4J9FV2m42jXMuioTT13idAILanYg8D3idvy/3isDVkON0X3UAVKrgMEne0hJpkPL
+FYqgetvDAoGBAKLQ6JZMbSe0pPIJkSamQhsehgL5Rs51iX4m1z7+sYFAJfhvN3Q/
+OGIHDRp6HjMUcxHpHw7U+S1TETxePwKLnLKj6hw8jnX2/nZRgWHzgVcY+sPsReRx
+NJVf+Cfh6yOtznfX00p+JWOXdSY8glSSHJwRAMog+hFGW1AYdt7w80XBAoGBAImR
+NUugqapgaEA8TrFxkJmngXYaAqpA0iYRA7kv3S4QavPBUGtFJHBNULzitydkNtVZ
+3w6hgce0h9YThTo/nKc+OZDZbgfN9s7cQ75x0PQCAO4fx2P91Q+mDzDUVTeG30mE
+t2m3S0dGe47JiJxifV9P3wNBNrZGSIF3mrORBVNDAoGBAI0QKn2Iv7Sgo4T/XjND
+dl2kZTXqGAk8dOhpUiw/HdM3OGWbhHj2NdCzBliOmPyQtAr770GITWvbAI+IRYyF
+S7Fnk6ZVVVHsxjtaHy1uJGFlaZzKR4AGNaUTOJMs6NadzCmGPAxNQQOCqoUjn4XR
+rOjr9w349JooGXhOxbu8nOxX
+-----END PRIVATE KEY-----
+"""
+
+    key = RSA.import_key(PKCS8.unwrap(PEM.decode(rawKey)[0])[1])
+
+    h = SHA512.new(base.encode('utf-8'))
+    signer = pss.new(key, mask_func=mgf512, salt_bytes=64)
+
+    signed = http_sfv.Item(signer.sign(h))
+
+    print("Signed:")
+    print()
+    print(signed)
+    print()
+    print(hardwrap(str(signed).strip(':'), 0))
+    print()
+    print(hardwrap('Signature: sig=' + str(signed)))
+    print()
+
+    rawPubKey = """-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAr4tmm3r20Wd/PbqvP1s2
++QEtvpuRaV8Yq40gjUR8y2Rjxa6dpG2GXHbPfvMs8ct+Lh1GH45x28Rw3Ry53mm+
+oAXjyQ86OnDkZ5N8lYbggD4O3w6M6pAvLkhk95AndTrifbIFPNU8PPMO7OyrFAHq
+gDsznjPFmTOtCEcN2Z1FpWgchwuYLPL+Wokqltd11nqqzi+bJ9cvSKADYdUAAN5W
+Utzdpiy6LbTgSxP7ociU4Tn0g5I6aDZJ7A8Lzo0KSyZYoA485mqcO0GVAdVw9lq4
+aOT9v6d+nb4bnNkQVklLQ3fVAvJm+xdDOp9LCNCN48V2pnDOkFV6+U9nV5oyc6XI
+2wIDAQAB
+-----END PUBLIC KEY-----
+"""
+
+    pubKey = RSA.import_key(rawPubKey)
+    verifier = pss.new(pubKey, mask_func=mgf512, salt_bytes=64)
+
+    try:
+        verified = verifier.verify(h, signed.value)
+        print("Verified:")
+        print(colored('> YES!', 'green'))
+        results['httpsig.org signed req'] = 'YES'
+        print()
+    except (ValueError, TypeError):
+        print("Verified:")
+        print(colored('> NO!', 'red'))
+        results['httpsig.org signed req'] = 'NO'
+        print()
+
+if 'httpsigorgres' in args.target:
+    ## Base example pieces
+
+    print(colored('*' * 30, 'blue'))
+    print(colored('*', 'blue') + ' Covered Content RSAPSS Test')
+    print(colored('*' * 30, 'blue'))
+
+
+    msg = b"""HTTP/1.1 200 OK
+Date: Tue, 20 Apr 2021 02:07:56 GMT
+Content-Type: application/json
+Content-Length: 18
+
+{"hello": "world"}"""
+
+    components = parse_components(msg)
+
+    components = add_content_digest(components)
+    cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
+
+    print("Content Digest:")
+    print()
+    print(str(cd['val']))
+    print()
+    print(hardwrap(str(cd['val'])))
+    print()
+    print(hardwrap('Content-Digest: ' + str(cd['val'])))
+    print()
+
+    siginput = generate_base(
+        components, 
+        ( # covered components list
+            { 'id': "@status" },
+            { 'id': "content-digest" },
+            { 'id': "content-length" },
+            { 'id': "content-type" }
+        ),
+        {
+            'alg': 'rsa-pss-sha512',
+            'created': 1618884473,
+            'keyid': 'RSA (X.509 preloaded)'
+        }
+    )
+
+    base = siginput['signatureInput']
+    sigparams = siginput['signatureParams']
+
+    print("Base string:")
+    print()
+    print(base)
+    print()
+    print(hardwrap(base))
+    print()
+    print(softwrap(base))
+    print()
+    print(softwrap('Signature-Input: sig=' + str(sigparams)))
+    print()
+
+    rawKey = """-----BEGIN PRIVATE KEY-----
+MIIEvgIBADALBgkqhkiG9w0BAQoEggSqMIIEpgIBAAKCAQEAr4tmm3r20Wd/Pbqv
+P1s2+QEtvpuRaV8Yq40gjUR8y2Rjxa6dpG2GXHbPfvMs8ct+Lh1GH45x28Rw3Ry5
+3mm+oAXjyQ86OnDkZ5N8lYbggD4O3w6M6pAvLkhk95AndTrifbIFPNU8PPMO7Oyr
+FAHqgDsznjPFmTOtCEcN2Z1FpWgchwuYLPL+Wokqltd11nqqzi+bJ9cvSKADYdUA
+AN5WUtzdpiy6LbTgSxP7ociU4Tn0g5I6aDZJ7A8Lzo0KSyZYoA485mqcO0GVAdVw
+9lq4aOT9v6d+nb4bnNkQVklLQ3fVAvJm+xdDOp9LCNCN48V2pnDOkFV6+U9nV5oy
+c6XI2wIDAQABAoIBAQCUB8ip+kJiiZVKF8AqfB/aUP0jTAqOQewK1kKJ/iQCXBCq
+pbo360gvdt05H5VZ/RDVkEgO2k73VSsbulqezKs8RFs2tEmU+JgTI9MeQJPWcP6X
+aKy6LIYs0E2cWgp8GADgoBs8llBq0UhX0KffglIeek3n7Z6Gt4YFge2TAcW2WbN4
+XfK7lupFyo6HHyWRiYHMMARQXLJeOSdTn5aMBP0PO4bQyk5ORxTUSeOciPJUFktQ
+HkvGbym7KryEfwH8Tks0L7WhzyP60PL3xS9FNOJi9m+zztwYIXGDQuKM2GDsITeD
+2mI2oHoPMyAD0wdI7BwSVW18p1h+jgfc4dlexKYRAoGBAOVfuiEiOchGghV5vn5N
+RDNscAFnpHj1QgMr6/UG05RTgmcLfVsI1I4bSkbrIuVKviGGf7atlkROALOG/xRx
+DLadgBEeNyHL5lz6ihQaFJLVQ0u3U4SB67J0YtVO3R6lXcIjBDHuY8SjYJ7Ci6Z6
+vuDcoaEujnlrtUhaMxvSfcUJAoGBAMPsCHXte1uWNAqYad2WdLjPDlKtQJK1diCm
+rqmB2g8QE99hDOHItjDBEdpyFBKOIP+NpVtM2KLhRajjcL9Ph8jrID6XUqikQuVi
+4J9FV2m42jXMuioTT13idAILanYg8D3idvy/3isDVkON0X3UAVKrgMEne0hJpkPL
+FYqgetvDAoGBAKLQ6JZMbSe0pPIJkSamQhsehgL5Rs51iX4m1z7+sYFAJfhvN3Q/
+OGIHDRp6HjMUcxHpHw7U+S1TETxePwKLnLKj6hw8jnX2/nZRgWHzgVcY+sPsReRx
+NJVf+Cfh6yOtznfX00p+JWOXdSY8glSSHJwRAMog+hFGW1AYdt7w80XBAoGBAImR
+NUugqapgaEA8TrFxkJmngXYaAqpA0iYRA7kv3S4QavPBUGtFJHBNULzitydkNtVZ
+3w6hgce0h9YThTo/nKc+OZDZbgfN9s7cQ75x0PQCAO4fx2P91Q+mDzDUVTeG30mE
+t2m3S0dGe47JiJxifV9P3wNBNrZGSIF3mrORBVNDAoGBAI0QKn2Iv7Sgo4T/XjND
+dl2kZTXqGAk8dOhpUiw/HdM3OGWbhHj2NdCzBliOmPyQtAr770GITWvbAI+IRYyF
+S7Fnk6ZVVVHsxjtaHy1uJGFlaZzKR4AGNaUTOJMs6NadzCmGPAxNQQOCqoUjn4XR
+rOjr9w349JooGXhOxbu8nOxX
+-----END PRIVATE KEY-----
+"""
+
+    key = RSA.import_key(PKCS8.unwrap(PEM.decode(rawKey)[0])[1])
+
+    h = SHA512.new(base.encode('utf-8'))
+    signer = pss.new(key, mask_func=mgf512, salt_bytes=64)
+
+    signed = http_sfv.Item(signer.sign(h))
+
+    print("Signed:")
+    print()
+    print(signed)
+    print()
+    print(hardwrap(str(signed).strip(':'), 0))
+    print()
+    print(hardwrap('Signature: sig=' + str(signed)))
+    print()
+
+    rawPubKey = """-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAr4tmm3r20Wd/PbqvP1s2
++QEtvpuRaV8Yq40gjUR8y2Rjxa6dpG2GXHbPfvMs8ct+Lh1GH45x28Rw3Ry53mm+
+oAXjyQ86OnDkZ5N8lYbggD4O3w6M6pAvLkhk95AndTrifbIFPNU8PPMO7OyrFAHq
+gDsznjPFmTOtCEcN2Z1FpWgchwuYLPL+Wokqltd11nqqzi+bJ9cvSKADYdUAAN5W
+Utzdpiy6LbTgSxP7ociU4Tn0g5I6aDZJ7A8Lzo0KSyZYoA485mqcO0GVAdVw9lq4
+aOT9v6d+nb4bnNkQVklLQ3fVAvJm+xdDOp9LCNCN48V2pnDOkFV6+U9nV5oyc6XI
+2wIDAQAB
+-----END PUBLIC KEY-----
+"""
+
+    pubKey = RSA.import_key(rawPubKey)
+    verifier = pss.new(pubKey, mask_func=mgf512, salt_bytes=64)
+
+    try:
+        verified = verifier.verify(h, signed.value)
+        print("Verified:")
+        print(colored('> YES!', 'green'))
+        results['httpsig.org signed req'] = 'YES'
+        print()
+    except (ValueError, TypeError):
+        print("Verified:")
+        print(colored('> NO!', 'red'))
+        results['httpsig.org signed req'] = 'NO'
+        print()
+
 
 
 if 'revproxy' in args.target:
@@ -636,6 +915,228 @@ if 'revproxy' in args.target:
         print("Verified:")
         print(colored('> NO!', 'red'))
         results['Reverse Proxy'] = 'NO'
+        print()
+
+
+if 'gnap' in args.target:
+    print(colored('*' * 30, 'blue'))
+
+    ## reverse proxy signature
+    print(colored('*', 'blue') + ' GNAP Rotation ')
+    print(colored('*' * 30, 'blue'))
+
+    # Plain message
+    msg = b"""POST /token/PRY5NM33 HTTP/1.1
+Host: server.example.com
+Authorization: GNAP 4398.34-12-asvDa.a
+Content-Type: application/json
+Content-Length: 251
+
+{
+    "key": {
+        "proof": "httpsig",
+        "jwk": {
+            "kty": "RSA",
+            "e": "AQAB",
+            "kid": "xyz-2",
+            "alg": "RS256",
+            "n": "kOB5rR4Jv0GMeLaY6_It_r3ORwdf8ci_JtffXyaSx8xY..."
+        }
+    }
+}
+"""
+    components = parse_components(msg)
+
+    # Add content digest
+    components = add_content_digest(components)
+    cd = next((x for x in components['fields'] if x['id'] == "content-digest"), None)
+
+    print('Content Digest:')
+    print()
+    print(str(cd['val']))
+    print()
+    print(hardwrap(str(cd['val'])))
+    print()
+    print(hardwrap('Content-Digest: ' + str(cd['val'])))
+    print()
+
+    # Add Signature
+
+    siginput = generate_base(
+        components, 
+        ( # covered components list
+            { 'id': "@method" },
+            { 'id': '@target-uri' },
+            { 'id': "content-digest" },
+            { 'id': "authorization" }
+        ),
+        {
+            'created': 1618884475,
+            'keyid': 'test-key-ecc-p256',
+            'tag': 'gnap'
+        }
+    )
+
+    base = siginput['signatureInput']
+    sigparams = siginput['signatureParams']
+
+    print("Old Key Base string:")
+    print()
+    print(base)
+    print()
+    print(hardwrap(base))
+    print()
+    print(softwrap(base))
+    print()
+    print(softwrap(msg.decode()))
+    print()
+    print(hardwrap(msg.decode()))
+    print()
+    print(softwrap('Signature-Input: old-key=' + str(sigparams)))
+    print()
+
+    key = ECC.import_key(eccTestKeyPrivate)
+
+    h = SHA256.new(base.encode('utf-8'))
+    signer = DSS.new(key, 'fips-186-3')
+
+    signed = http_sfv.Item(signer.sign(h))
+
+    print("Client Signed:")
+    print()
+    print(signed)
+    print()
+    print(hardwrap(str(signed).strip(':'), 0))
+    print()
+    print(hardwrap('Signature: old-key=' + str(signed)))
+    print()
+
+
+    pubKey = ECC.import_key(eccTestKeyPublic)
+    verifier = DSS.new(pubKey, 'fips-186-3')
+
+    try:
+        verified = verifier.verify(h, signed.value)
+        print("Verified:")
+        print(colored('> YES!', 'green'))
+        results['GNAP Old'] = 'YES'
+        print()
+    except (ValueError, TypeError):
+        print("Verified:")
+        print(colored('> NO!', 'red'))
+        results['GNAP Old'] = 'NO'
+        print()
+
+
+    # Add first signature
+    sigfield = http_sfv.Dictionary()
+    sigfield['old-key'] = signed
+
+    cid = http_sfv.Item('Signature'.lower())
+    components['fields'].append(
+        {
+            'id': cid.value,
+            'cid': str(cid),
+            'val': str(sigfield)
+        }
+    )
+    cid = http_sfv.Item('Signature'.lower())
+    cid.params['key'] = 'old-key'
+    components['fields'].append(
+        {
+            'id': cid.value,
+            'cid': str(cid),
+            'key': 'old-key',
+            'val': str(signed)
+        }
+    )
+
+    siginputfield = http_sfv.Dictionary()
+    sigin = http_sfv.InnerList()
+    sigin.parse(sigparams.encode('utf-8')) # we have to re-parse because we're handed the string not the Item
+    siginputfield['old-key'] = sigin
+
+    cid = http_sfv.Item('Signature-Input'.lower())
+    components['fields'].append(
+        {
+            'id': cid.value,
+            'cid': str(cid),
+            'val': str(siginputfield)
+        }
+    )
+    cid = http_sfv.Item('Signature-Input'.lower())
+    cid.params['key'] = 'old-key'
+    components['fields'].append(
+        {
+            'id': cid.value,
+            'cid': str(cid),
+            'key': 'old-key',
+            'val': str(sigin)
+        }
+    )
+
+    siginput = generate_base(
+        components, 
+        ( # covered components list
+            { 'id': "@method" },
+            { 'id': '@target-uri' },
+            { 'id': "content-digest" },
+            { 'id': "authorization" },
+            { 'id': "signature", 'key': 'old-key'},
+            { 'id': "signature-input", 'key': 'old-key'}
+        ),
+        {
+            'created': 1618884480,
+            'keyid': 'xyz-2',
+            'tag': 'gnap-rotate'
+        }
+    )
+
+    base = siginput['signatureInput']
+    sigparams = siginput['signatureParams']
+
+    print("Proxy Base string:")
+    print()
+    print(base)
+    print()
+    print(hardwrap(base))
+    print()
+    print(softwrap(base))
+    print()
+    print(', \\')
+    print(softwrap('  new-key=' + str(sigparams), 4))
+    print()
+
+    key = RSA.import_key(rsaTestKeyPrivate)
+
+    h = SHA256.new(base.encode('utf-8'))
+    signer = pkcs1_15.new(key)
+
+    signed = http_sfv.Item(signer.sign(h))
+
+    print("Proxy Signed:")
+    print()
+    print(signed)
+    print()
+    print(hardwrap(str(signed).strip(':'), 0))
+    print()
+    print(', \\')
+    print(hardwrap('  new-key=' + str(signed), 4))
+    print()
+
+    pubKey = RSA.import_key(rsaTestKeyPublic)
+    verifier = pkcs1_15.new(pubKey)
+
+    try:
+        verified = verifier.verify(h, signed.value)
+        print("Verified:")
+        print(colored('> YES!', 'green'))
+        results['GNAP New'] = 'YES'
+        print()
+    except (ValueError, TypeError):
+        print("Verified:")
+        print(colored('> NO!', 'red'))
+        results['GNAP New'] = 'NO'
         print()
 
 
@@ -1084,7 +1585,7 @@ if 'reqres' in args.target:
     print(colored('*', 'blue') + ' Request-Response')
     print(colored('*' * 30, 'blue'))
 
-    reqComponents = parse_components(exampleReverseProxyMessage)
+    reqComponents = parse_components(exampleRequestRequestMessage)
     reqComponents = add_content_digest(reqComponents)
     rcd = next((x for x in reqComponents['fields'] if x['id'] == "content-digest"), None)
 
@@ -1141,9 +1642,9 @@ if 'reqres' in args.target:
     print()
     print(softwrap(base))
     print()
-    print(softwrap(exampleReverseProxyMessage.decode()))
+    print(softwrap(exampleRequestRequestMessage.decode()))
     print()
-    print(hardwrap(exampleReverseProxyMessage.decode()))
+    print(hardwrap(exampleRequestRequestMessage.decode()))
     print()
     print(softwrap(exampleRequestResponseMessage.decode()))
     print()
@@ -1214,9 +1715,9 @@ if 'reqres' in args.target:
     print()
     print(softwrap(base))
     print()
-    print(softwrap(exampleReverseProxyClientMessage.decode()))
+    print(softwrap(exampleRequestRequestMessage.decode()))
     print()
-    print(hardwrap(exampleReverseProxyClientMessage.decode()))
+    print(hardwrap(exampleRequestRequestMessage.decode()))
     print()
     print(softwrap('Signature-Input: sig1=' + str(sigparams)))
     print()
@@ -1335,9 +1836,9 @@ if 'reqres' in args.target:
     print()
     print(softwrap(base))
     print()
-    print(softwrap(exampleReverseProxyMessage.decode()))
+    print(softwrap(exampleRequestRequestMessage.decode()))
     print()
-    print(hardwrap(exampleReverseProxyMessage.decode()))
+    print(hardwrap(exampleRequestRequestMessage.decode()))
     print()
     print(softwrap(exampleRequestResponseMessage.decode()))
     print()

@@ -17,7 +17,7 @@ def hardwrap(src, space = 2, width = 68):
         out.append(('\\\n' + (' ' * space)).join(lout))
     return ('\n').join(out)
 
-def softwrap(src, space = 2, width = 68, breakon = '; '):
+def softwrap(src, space = 2, width = 68, breakon = '; ', minfill=  0):
     lines = src.split('\n') # split existing lines
     out = [] # output buffer
     for l in lines:
@@ -25,7 +25,7 @@ def softwrap(src, space = 2, width = 68, breakon = '; '):
         if len(l) > width:
             ll = l[slice(width - 1)] # leave room for a backslash
             # find if there's a better place to break
-            br = max(map(ll.rfind, breakon))
+            br = max([ll.rfind(ch, minfill) for ch in breakon])
             if br > -1:
                 if ll[br] == ' ':
                     br = br + 1 # capture the space
